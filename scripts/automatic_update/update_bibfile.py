@@ -94,28 +94,36 @@ def get_citations(semantic_scholar_ids, sch):
 
 
 def get_bib_info(diag_bib_file, item): #diag_bib_file is the file read in as a string, item is row from csv
-    #Get DOI information
+    """
+    Checks if a DOI exists in the list of BibEntry objects. If not, generates and returns a new BibTeX entry.
 
-    # if no ss_doi exists
-    if len(str(item['ss_doi']))==0 or str(item['ss_doi'])=='nan':
-        print('no ss_doi available, I cannot add new bib entry', item['ss_id'])
+    Args:
+        diag_bib_entries (list): List of existing DiagBib objects.
+        item (dict): Row from the CSV file containing 'ss_doi' and 'ss_id'.
+
+    Returns:
+        dict or None: Returns a new BibTeX entry as a dictionary if it doesn't already exist; otherwise, returns None.
+    """
+
+    # Ensure 'ss_doi' is present in the item and is not empty or NaN
+    ss_doi = str(item.get('ss_doi', ''))
+    if len(ss_doi) == 0 or ss_doi.lower() == 'nan':
+        print(f'No ss_doi available; cannot add new bib entry for {item.get("ss_id")}')
         return None
-    
-    # make sure doi is not already in diag.bib
-    if item['ss_doi'] in diag_bib_file:
 
-        start_index = diag_bib_file.find(item['ss_doi'])
-        end_index = diag_bib_file.find('}', start_index)  # Include the closing brace
-        matching_item_str = diag_bib_file[start_index:end_index]
+    # Check if the DOI already exists in the BibEntry list
+    existing_entry = None
+    for entry in diag_bib_file:
+        # Check if the 'doi' field exists in the current BibEntry and matches 'ss_doi'
+        if 'doi' in entry.fields and entry.fields['doi'] == ss_doi:
+            existing_entry = entry
+            break
 
-        print('DOI already exists in bib file. Matching item:', matching_item_str)
-
-        if matching_item_str == item['ss_doi']:
-            print('doi already exists in bib file, I will not add new bib entry', item['ss_doi'], item['ss_id'])
-            return None
-        
-        else:
-            print('similar doi already exists in bib file, but new item will be added for ', item['ss_doi'], item['ss_id'])
+    # If the DOI is found in the existing entries, print information and return None
+    if existing_entry:
+        print(f'DOI already exists in bib file. Matching item key: {existing_entry.key}')
+        print(f'doi already exists in bib file, I will not add new bib entry for {ss_doi} and {item.get("ss_id")}')
+        return None
 
     # Get BibLatex information based on DOI if not in the file
     reader = GetBiblatex(doi=item['ss_doi'], ss_id=item['ss_id'], diag_bib=diag_bib_file)
@@ -323,7 +331,7 @@ def main():
     
 
     # load bib file just for reading at this point
-    diag_bib_path = os.path.join('diag.bib')
+    diag_bib_path = os.path.join(r"C:\Users\drepeeters\OneDrive - Radboudumc\Desktop\webteam\Literature\diag.bib")
 
     diag_bib_raw = read_bibfile(None, diag_bib_path)
     remove_items = manually_checked[manually_checked['action']=='[update item]']['bibkey'].tolist()
@@ -331,13 +339,13 @@ def main():
     save_to_file(diag_bib_raw, None, 'diag.bib')
 
 
+    blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid = loop_manual_check(manually_checked, diag_bib_raw)
+
     with open(diag_bib_path, 'r', encoding="utf8") as orig_bib_file:
         diag_bib_orig = orig_bib_file.read()
 
-    blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid = loop_manual_check(manually_checked, diag_bib_orig)
-    
     #Add new bib entries to the diag.bib file
-    diag_bib_added_items = diag_bib_orig + items_to_add  
+    diag_bib_added_items = diag_bib_orig + items_to_add
     with open('diag.bib', 'w', encoding="utf8") as bibtex_file:
         bibtex_file.write(diag_bib_added_items)
 

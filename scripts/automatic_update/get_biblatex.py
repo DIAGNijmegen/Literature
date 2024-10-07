@@ -84,39 +84,37 @@ class GetBiblatex:
         return abstract_text
 
     @staticmethod
-    def _clean_author_abbreviation(auth_abr, year, bib_file):
-        auth_abr = auth_abr+year
-        substring_end = ","
-        max_length = 3
+    def _clean_author_abbreviation(auth_abr, year, entries):
+        """
+        Creates a unique author-year key for a BibEntry based on existing entries.
 
-        count = 0
-        start_index = 0
-        while True:
-            start = bib_file.find(auth_abr, start_index)
-            if start == -1:
-                break
-            end = bib_file.find(substring_end, start + len(auth_abr))
-            if end == -1:
-                break
-            substring = bib_file[start+len(auth_abr):end]
-            if len(substring) <= max_length:
-                count += 1
-            start_index = end + len(substring_end)
+        Args:
+            auth_abr (str): The initial author abbreviation (e.g., 'Peet').
+            year (str): Year of publication (e.g., '24' for 2024).
+            entries (list): List of existing BibEntry objects with `entry.key` attributes.
 
-        letters = {1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e',
-                   6: 'f', 7: 'g', 8: 'h', 9: 'i', 10: 'j',
-                   11: 'k', 12: 'l', 13: 'm', 14: 'n', 15: 'o',
-                   16: 'p', 17: 'q', 18: 'r', 19: 's', 20: 't',
-                   21: 'u', 22: 'v', 23: 'w', 24: 'x', 25: 'y', 26: 'z'}
+        Returns:
+            str: A unique author-year key (e.g., 'Peet24', 'Peet24a', 'Peet24b').
+        """
+        # Combine author abbreviation with the year to form the initial key (e.g., "Peet24").
+        base_key = auth_abr + year
 
-        if count != 0:
-            for i in range(1, count+2):
-                abbreviation = auth_abr+letters[i]
-                if bib_file.count(abbreviation) == 0:
-                    auth_abr = auth_abr + letters[i]
-                    break
+        # Collect existing keys to check for duplicates
+        existing_keys = {entry.key for entry in entries}
 
-        return auth_abr
+        # If the base key is not in existing keys, return it as the new unique key
+        if base_key not in existing_keys:
+            return base_key
+
+        # If the base key exists, try adding alphabetical suffixes (a, b, c, etc.) until a unique key is found
+        letters = 'abcdefghijklmnopqrstuvwxyz'
+        for letter in letters:
+            new_key = base_key + letter  # Create new keys like "Peet24a", "Peet24b", etc.
+            if new_key not in existing_keys:
+                return new_key
+
+        # If all single-letter suffixes are used, raise an error or use a different strategy
+        raise ValueError(f"Could not generate a unique key for {base_key}. Consider expanding suffix options.")
 
     def get_bib_text(self):
 
@@ -145,10 +143,6 @@ class GetBiblatex:
         elif 'posted-content' in response_json['type']:
             kind = 'article'
             journal = 'Preprint'
-
-
-
-            
 
         author_string = "{"
         for index, author in enumerate(response_json["author"]):
