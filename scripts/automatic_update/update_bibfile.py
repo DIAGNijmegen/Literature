@@ -331,7 +331,7 @@ def main():
     
 
     # load bib file just for reading at this point
-    diag_bib_path = os.path.join(r"C:\Users\drepeeters\OneDrive - Radboudumc\Desktop\webteam\Literature\diag.bib")
+    diag_bib_path = os.path.join('diag.bib')
 
     diag_bib_raw = read_bibfile(None, diag_bib_path)
     remove_items = manually_checked[manually_checked['action']=='[update item]']['bibkey'].tolist()
