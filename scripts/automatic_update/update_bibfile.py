@@ -7,7 +7,7 @@ current_script_directory = os.path.dirname(os.path.realpath(__file__))
 project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
 sys.path.append(os.path.join(project_root))
 from get_biblatex import GetBiblatex
-from bib_handling_code.processbib import read_bibfile
+from bib_handling_code.processbib import read_bibfile, parse_bibtex_string
 from bib_handling_code.processbib import save_to_file
 from ast import literal_eval
 from collections import defaultdict
@@ -258,7 +258,7 @@ def get_latest_manual_check_file(directory):
 def loop_manual_check(manually_checked, diag_bib_orig):
     # Iterate through all items in the manually checked csv
     blacklist_items = []
-    items_to_add = ''
+    items_to_add = []
     items_to_update = []
     
     failed_new_items = []
@@ -282,7 +282,10 @@ def loop_manual_check(manually_checked, diag_bib_orig):
            bib_item_text = get_bib_info(diag_bib_orig, bib_item)
            print(bib_item_text)
            if bib_item_text is not None:
-               items_to_add += bib_item_text
+               # convert string to BibEntry format
+               new_item = parse_bibtex_string(bib_item_text)
+               items_to_add.append(new_item)
+
                # if there is a pmid note it to be added afterwards
                ss_pmid = bib_item['ss_pmid'].strip()
                if len(ss_pmid)>0:
@@ -341,13 +344,10 @@ def main():
 
     blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid = loop_manual_check(manually_checked, diag_bib_raw)
 
-    with open(diag_bib_path, 'r', encoding="utf8") as orig_bib_file:
-        diag_bib_orig = orig_bib_file.read()
-
     #Add new bib entries to the diag.bib file
-    diag_bib_added_items = diag_bib_orig + items_to_add
-    with open('diag.bib', 'w', encoding="utf8") as bibtex_file:
-        bibtex_file.write(diag_bib_added_items)
+    diag_bib_raw = read_bibfile(None, diag_bib_path)
+    diag_bib_added_items = diag_bib_raw + items_to_add
+    save_to_file(diag_bib_added_items, None, 'diag.bib')
 
     # # Update newly added items with pmids where possible
     diag_bib_raw = read_bibfile(None, 'diag.bib')
