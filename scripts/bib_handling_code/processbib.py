@@ -269,6 +269,35 @@ def read_bibfile(filename, full_path=None):
     return entries
 
 
+def parse_bibtex_string(bibtex_string: str) -> BibEntry:
+    # Create a new BibEntry instance
+    bib_entry = BibEntry()
+
+    # Remove newline characters for easier parsing
+    bibtex_string = bibtex_string.replace("\n", " ").strip()
+
+    # Use regex to extract the BibTeX entry type (e.g., article) and key (e.g., Jurg24a)
+    type_and_key_match = re.match(r"@(\w+)\{([^,]+),", bibtex_string)
+    if not type_and_key_match:
+        raise ValueError("Invalid BibTeX entry format")
+
+    bib_entry.type = type_and_key_match.group(1).lower()  # Extract entry type
+    bib_entry.key = type_and_key_match.group(2).strip()  # Extract entry key
+
+    # Now we remove the entry type and key from the string, leaving just the fields
+    fields_string = bibtex_string[type_and_key_match.end():].strip()
+
+    # Extract individual fields using a regex
+    field_matches = re.findall(r"(\w+)\s*=\s*\{([^}]+)\}", fields_string)
+
+    # Populate the BibEntry fields
+    for field, value in field_matches:
+        value = unidecode(value.strip())  # Ensure values are properly formatted
+        bib_entry.fields[field.strip().lower()] = f"{{{value}}}"
+
+    return bib_entry
+
+
 def statistics(e):
     print("\nStatistics on entries\n")
     kd = {}
