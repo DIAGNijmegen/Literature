@@ -13,6 +13,7 @@ def remove_eol_spaces_bib():
     """
     bib_files = [
         "diag.bib",
+        "cara.bib", 
         "diagnoweb.bib",
         "fullstrings.bib",
         "medlinestrings.bib",
