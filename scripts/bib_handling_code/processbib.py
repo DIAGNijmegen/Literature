@@ -268,15 +268,14 @@ def read_bibfile(filename, full_path=None):
     fp.close()
     return entries
 
-
 def parse_bibtex_string(bibtex_string: str) -> BibEntry:
     # Create a new BibEntry instance
     bib_entry = BibEntry()
 
-    # Remove newline characters for easier parsing
-    bibtex_string = bibtex_string.replace("\n", " ").strip()
+    # Remove leading/trailing spaces and ensure proper formatting
+    bibtex_string = bibtex_string.strip()
 
-    # Use regex to extract the BibTeX entry type (e.g., article) and key (e.g., Jurg24a)
+    # Use regex to extract the BibTeX entry type (e.g., article) and key (e.g., Hopp24a)
     type_and_key_match = re.match(r"@(\w+)\{([^,]+),", bibtex_string)
     if not type_and_key_match:
         raise ValueError("Invalid BibTeX entry format")
@@ -287,13 +286,37 @@ def parse_bibtex_string(bibtex_string: str) -> BibEntry:
     # Now we remove the entry type and key from the string, leaving just the fields
     fields_string = bibtex_string[type_and_key_match.end():].strip()
 
-    # Extract individual fields using a regex
-    field_matches = re.findall(r"(\w+)\s*=\s*\{([^}]+)\}", fields_string)
+    # A recursive function to parse fields with nested braces
+    def parse_fields(fields_str):
+        fields = {}
+        stack = []
+        key, value, brace_level = None, "", 0
 
-    # Populate the BibEntry fields
-    for field, value in field_matches:
-        value = unidecode(value.strip())  # Ensure values are properly formatted
-        bib_entry.fields[field.strip().lower()] = f"{{{value}}}"
+        for i, char in enumerate(fields_str):
+            if char == "=" and brace_level == 0 and not key:
+                key = fields_str[:i].strip()  # Capture the key
+                stack.append("=")
+            elif char == "{" and stack and stack[-1] == "=":
+                brace_level += 1
+                value += char
+            elif char == "}":
+                brace_level -= 1
+                value += char
+                if brace_level == 0:
+                    fields[key] = value.strip()
+                    stack.pop()  # Remove "="
+                    remainder = fields_str[i + 1:].lstrip(", ")
+                    if remainder:
+                        fields.update(parse_fields(remainder))  # Parse the remaining fields
+                    break
+            elif brace_level > 0:
+                value += char
+
+        return fields
+
+    # Extract individual fields, properly handling nested braces
+    fields = parse_fields(fields_string)
+    bib_entry.fields = {k.strip().lower(): v.strip() for k, v in fields.items()}
 
     return bib_entry
 
