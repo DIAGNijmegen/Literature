@@ -12,10 +12,10 @@ from collections import defaultdict
 from datetime import datetime
 
 staff_id_dict = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
-'Francesco Ciompi': [143613202, 2246376566, 2291304571],
+'Francesco Ciompi': [143613202, 2246376566, 2291304571, 2370540204],
 'Alessa Hering': [153744566],
 'Henkjan Huisman': [34754023, 2247422768, 2242473717, 2275450757],
-'Colin Jacobs': [2895994, 2281807058, 2331492473],
+'Colin Jacobs': [2895994, 2281807058, 2331492473, 2262970009, 2368325830],
 'Peter Koopmans': [34726383],
 'Jeroen van der Laak': [145441238, 145388932, 2347447, 2255290517, 2259038560],
 'Geert Litjens': [145959882],
@@ -58,14 +58,22 @@ staff_year_dict = {
 }
 
 
-def remove_blacklist_items(df_new_items, blacklist_path):
-    """Remove blacklisted items from the final DataFrame."""
+def remove_blacklist_items(df_new_items, blacklist_path, removed_items_output_path):
+    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
     blacklisted_items = pd.read_csv(blacklist_path)
     initial_length = len(df_new_items)
-    df_new_items = df_new_items[~df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique().tolist())] # remove blacklisted dois
-    df_new_items = df_new_items[~df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique().tolist()) | df_new_items['ss_doi'].isna()] # remove blacklisted dois
 
-    print(f"{initial_length-len(df_new_items)} items removed from newly found items.")
+    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
+    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
+
+    combined_mask = mask_ss_id | mask_ss_doi
+
+    removed_items = df_new_items[combined_mask]
+    removed_items.to_excel(removed_items_output_path, index=False)
+
+    df_new_items = df_new_items[~combined_mask]
+
+    print(f"{len(removed_items)} items removed from newly found items and saved to '{removed_items_output_path}'.")
     return df_new_items
 
 
@@ -328,7 +336,8 @@ def main():
     df=pd.DataFrame(total_list, columns=columns)
     current_date = datetime.now().strftime("%Y%m%d")
     file_name = os.path.join(project_root, 'script_data', f'manual_check_{current_date}.xlsx')
-    df = remove_blacklist_items(df, blacklist_path)
+    file_name_filtered = os.path.join(project_root, 'script_data', f'removed_{current_date}.xlsx')
+    df = remove_blacklist_items(df, blacklist_path, file_name_filtered)
     df=df.sort_values(['ss_id'])
     df.to_excel(file_name, index=False)
 
