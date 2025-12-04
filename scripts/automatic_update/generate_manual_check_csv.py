@@ -3,12 +3,14 @@ import requests
 import pandas as pd 
 import string
 import sys
-current_script_directory = os.path.dirname(os.path.realpath(__file__))
-project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
-sys.path.append(os.path.join(project_root))
+from pathlib import Path
+
+current_script_directory = Path(__file__).resolve().parent
+project_root = current_script_directory.parent
+sys.path.append(str(project_root))
+
 from bib_handling_code.processbib import read_bibfile
 from difflib import SequenceMatcher
-from collections import defaultdict
 from datetime import datetime
 
 staff_id_dict = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
