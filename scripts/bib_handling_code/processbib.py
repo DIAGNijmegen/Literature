@@ -59,17 +59,13 @@ def recode(chars):
     raise ValueError(f"Could not recode '{chars}'")
 
 
-def select_existing_path(*ps):
-    return [p for p in ps if os.path.exists(p)].pop()
+#def select_existing_path(*ps):
+#    return [p for p in ps if os.path.exists(p)].pop()
 
 
-# automatically select an existing path, allows functions to run on machines with different roots for literature
-literature_root = select_existing_path(
-    r'C:\svn_diag',
-    r'C:\git\literature',
-    '.'
-    # add other possible paths here
-)
+current_script_directory = Path(__file__).resolve().parent
+lit_update_scripts_directory = current_script_directory.parent
+literature_root = lit_update_scripts_directory.parent
 
 
 def strip_cb(s):
@@ -241,7 +237,7 @@ class BibEntry:
 def read_bibfile(filename, full_path=None):
     entries = []
     if full_path == None:
-        fp = open(literature_root + '/' + filename, encoding='utf-8')
+        fp = open(literature_root / filename, encoding='utf-8')
     else:
         fp = open(full_path, encoding='utf-8')
     line = fp.readline()

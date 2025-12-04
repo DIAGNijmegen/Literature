@@ -6,8 +6,10 @@ import sys
 from pathlib import Path
 
 current_script_directory = Path(__file__).resolve().parent
-project_root = current_script_directory.parent
-sys.path.append(str(project_root))
+literature_update_scripts_directory = current_script_directory.parent
+sys.path.append(str(literature_update_scripts_directory))
+
+repo_root = literature_update_scripts_directory.parent
 
 from bib_handling_code.processbib import read_bibfile
 from difflib import SequenceMatcher
@@ -108,7 +110,13 @@ def from_bib_to_csv(diag_bib_raw):
 
 
 def find_new_ssids(staff_id_dict, staff_year_dict):
-    """Find new items from Semantic Scholar, based on the staff IDs."""
+    """
+    Find new items from Semantic Scholar, based on staff IDs and years.
+    Returns a DataFrame with all paper info for staff members.
+    """
+    all_staff_data = []
+    staff_items = [(name, staff_id_dict[name], staff_year_dict[name]) for name in staff_id_dict]
+
     staff_dict = {key: {'ids': staff_id_dict[key], 'years': staff_year_dict[key]} for key in staff_id_dict}
     all_staff_id_ss_data = []
 
@@ -134,15 +142,15 @@ def find_new_ssids(staff_id_dict, staff_year_dict):
                 ss_year = ss_staff_entry.get('year')
                 pmid = ss_staff_entry['externalIds'].get('PubMed')
                 authors = ' and '.join([author['name'] for author in ss_staff_entry.get('authors', [])])
-                ss_journal = ss_staff_entry.get('journal', None).get('name')
-                
+                ss_journal = ss_staff_entry.get('journal', None)
+                ss_journal_name = ss_journal.get('name') if ss_journal else None
                         
                 if ss_year != None:
                     ss_year = int(ss_year)
                     if not staff_start <= ss_year <= staff_end:
                     # probably doesnt belong to DIAG, still captured via another staff member if also in the same paper
                         continue
-                staff_id_ss_data.append([staff_id, staff_name, staff_start, staff_end, ss_year, ss_id, ss_title, ss_doi, ss_citations, pmid, authors, ss_journal])
+                staff_id_ss_data.append([staff_id, staff_name, staff_start, staff_end, ss_year, ss_id, ss_title, ss_doi, ss_citations, pmid, authors, ss_journal_name])
                 
             all_staff_id_ss_data.extend(staff_id_ss_data)
 
@@ -227,13 +235,13 @@ def find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list
                 pmid=df_found_items[df_found_items['ss_id'] ==ss_id]['pmid'].item()
                 ss_title=df_found_items[df_found_items['ss_id']==ss_id]['title'].item()
                 ss_authors = df_found_items[df_found_items['ss_id']==ss_id]['authors'].item()
-                ss_journal = df_found_items[df_found_items['ss_id']==ss_id]['journal'].item()
+                ss_journal_name = df_found_items[df_found_items['ss_id']==ss_id]['journal'].item()
                 ss_year = int(df_found_items[df_found_items['ss_id']==ss_id]['ss_year'].item())
                 staff_id = int(df_found_items[df_found_items['ss_id']==ss_id]['staff_id'].item())
                 staff_name = df_found_items[df_found_items['ss_id']==ss_id]['staff_name'].item()
                 ratio = SequenceMatcher(a=ss_title,b=row.iloc[2]).ratio()
                 ss_id_match.append(ss_id)
-                list_doi_match.append((row.iloc[0], ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, doi, doi, row.iloc[2], ss_title, staff_id, staff_name, row.iloc[3], ss_authors, row.iloc[6], ss_journal, row.iloc[7], ss_year, row.iloc[1], pmid, 'doi match', actions_list))
+                list_doi_match.append((row.iloc[0], ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, doi, doi, row.iloc[2], ss_title, staff_id, staff_name, row.iloc[3], ss_authors, row.iloc[6], ss_journal_name, row.iloc[7], ss_year, row.iloc[1], pmid, 'doi match', actions_list))
     return not_new, ss_id_match, list_doi_match, update_item, update_item_ssid
 
 
@@ -289,19 +297,19 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
             ss_authors = new_items[new_items['ss_id'] == ss_id]['authors'].item()
             staff_id = new_items[new_items['ss_id'] == ss_id]['staff_id'].item()
             staff_name = new_items[new_items['ss_id'] == ss_id]['staff_name'].item()
-            ss_journal = new_items[new_items['ss_id'] == ss_id]['journal'].item()
+            ss_journal_name = new_items[new_items['ss_id'] == ss_id]['journal'].item()
             ss_year = new_items[new_items['ss_id'] == ss_id]['ss_year'].item()
             ss_pmid = new_items[new_items['ss_id'] == ss_id]['pmid'].item()
             
             if doi is None:
-                list_no_dois.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal, max_bib_year, ss_year, type_article, ss_pmid, 'doi None', actions_list))
+                list_no_dois.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'doi None', actions_list))
             else:
-                list_to_add.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal, max_bib_year, ss_year, type_article, ss_pmid, 'new item', actions_list))
+                list_to_add.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'new item', actions_list))
     return list_title_match, list_no_dois, list_to_add
 
 
 def main():
-    path_diag_bib = project_root / 'diag.bib'
+    path_diag_bib = repo_root / 'diag.bib'
     diag_bib_raw = read_bibfile(None, path_diag_bib)
     df_bib = from_bib_to_csv(diag_bib_raw)
     
