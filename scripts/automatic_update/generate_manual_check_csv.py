@@ -132,7 +132,7 @@ def find_new_ssids(staff_id_dict, staff_year_dict):
                 ss_year = ss_staff_entry.get('year')
                 pmid = ss_staff_entry['externalIds'].get('PubMed')
                 authors = ' and '.join([author['name'] for author in ss_staff_entry.get('authors', [])])
-                ss_journal = ss_staff_entry['journal'].get('name') if ss_staff_entry['journal'] and 'name' in ss_staff_entry['journal'] else None
+                ss_journal = ss_staff_entry.get('journal', None).get('name')
                 
                         
                 if ss_year != None:
@@ -299,7 +299,7 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
 
 
 def main():
-    path_diag_bib = os.path.join('diag.bib')
+    path_diag_bib = project_root / 'diag.bib'
     diag_bib_raw = read_bibfile(None, path_diag_bib)
     df_bib = from_bib_to_csv(diag_bib_raw)
     
@@ -321,9 +321,11 @@ def main():
     new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
     
     # Remove blacklist items
-    blacklist_path = os.path.join(project_root, 'script_data', 'blacklist.csv')
+    blacklist_path = project_root / 'script_data' / 'blacklist.csv'
     blacklist = pd.read_csv(blacklist_path)
-    new_items = new_items[~new_items['doi'].isin(blacklist['doi'].unique().tolist())]
+    # Normalize DOIs for both new_items and blacklist before filtering
+    normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
+    new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
     dois = new_items['doi'].tolist()
     ss_ids = new_items['ss_id'].tolist()
     
