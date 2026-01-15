@@ -20,7 +20,6 @@ from bib_handling_code.processbib import read_bibfile
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-
 ACTIONS = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
 
 # (File) folders relative to repository root
