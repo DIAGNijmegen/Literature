@@ -29,7 +29,7 @@ CONFIG = {
     "min_year": 2015,
 }
 
-staff_id_dict = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
+STAFF_IDS = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
 'Francesco Ciompi': [143613202, 2246376566, 2291304571, 2370540204],
 'Alessa Hering': [153744566],
 'Henkjan Huisman': [34754023, 2247422768, 2242473717, 2275450757],
@@ -51,7 +51,7 @@ staff_id_dict = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 223766578
 "Rashindra Manniesing" : [2657081],
 "Nadieh Khalili": [144870959]}
 
-staff_year_dict = {
+STAFF_YEARS = {
 'Bram van Ginneken':  {'start' : 1996, 'end': 9999},
 'Francesco Ciompi':  {'start' : 2013, 'end': 9999},
 'Alessa Hering':  {'start' : 2018, 'end': 9999},
@@ -130,14 +130,14 @@ def from_bib_to_df(diag_bib_raw):
     return pd.DataFrame(bib_data, columns=columns)
 
 
-def find_new_ssids(staff_id_dict, year_dict):
+def find_new_ssids():
     """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
     all_staff_id_ss_data = []
 
-    for staff_name, staff_ids in staff_id_dict.items():
+    for staff_name, staff_ids in STAFF_IDS.items():
         print('Processing staff member:', staff_name)
 
-        staff_years = year_dict.get(staff_name)
+        staff_years = STAFF_YEARS.get(staff_name)
         if not staff_years:
             logging.warning(f"No year information found for staff member: {staff_name}. Skipping.")
             continue
@@ -147,7 +147,7 @@ def find_new_ssids(staff_id_dict, year_dict):
 
         for staff_id in staff_ids:
             print('\t\t', staff_id)
-            
+
             url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
             r = requests.get(url)
             r.raise_for_status()
@@ -180,19 +180,32 @@ def find_new_ssids(staff_id_dict, year_dict):
                 
     columns = ['staff_id', 'staff_name', 'staff_from', 'staff_till', 'ss_year', 'ss_id', 'title', 'doi', 'ss_citations', 'pmid', 'authors', 'journal']
     df_all_staff_id_ss_data = pd.DataFrame(all_staff_id_ss_data, columns=columns)
+   # df_all_staff_id_ss_data = df_all_staff_id_ss_data.drop_duplicates(subset=['ss_id'])
+
+    df_all_staff_id_ss_data = (
+        df_all_staff_id_ss_data
+        .sort_values(by=['ss_id', 'staff_id'])
+        .drop_duplicates(subset=['ss_id'], keep='first')
+        .reset_index(drop=True)
+    )
 
     print('DONE')
     return df_all_staff_id_ss_data
 
 
-def find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list):
+def find_doi_match(df_bib, df_found_items, actions_list):
     """Find DOI matches between the bib items and found items."""
     
-    list_doi_match = []
-    not_new = []
-    ss_id_match = []
-    update_item = []
-    update_item_ssid = []
+    list_doi_match = []     # Bib entry & SS paper matched by DOI
+    not_new = []            # SS papers already known: ignore
+    ss_id_match = []        # SS papers matched via DOI but not linked yet
+    update_item = []        # Bib entry should be updated (e.g., arXiv to DOI)
+    update_item_ssid = []   # ss_ids that will be updated.
+
+    found_dois = df_found_items['doi'].tolist()
+    found_items = df_found_items['ss_id'].tolist()
+
+
     all_dois = return_existing_dois(df_bib)
     for index, row in df_bib.iterrows():
         doi = row.iloc[4]
@@ -234,7 +247,9 @@ def find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list
                 ratio = SequenceMatcher(a=ss_title,b=row.iloc[2]).ratio()
                 ss_id_match.append(ss_id)
                 list_doi_match.append((row.iloc[0], ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, doi, doi, row.iloc[2], ss_title, staff_id, staff_name, row.iloc[3], ss_authors, row.iloc[6], ss_journal_name, row.iloc[7], ss_year, row.iloc[1], pmid, 'doi match', actions_list))
-    return not_new, ss_id_match, list_doi_match, update_item, update_item_ssid
+    
+    to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
+    return to_add, list_doi_match, update_item
 
 
 def find_title_match_or_new_items(new_items, df_bib, actions_list):
@@ -304,25 +319,20 @@ def main():
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     df_bib = from_bib_to_df(diag_bib_raw)
     
-    # Find items from semantic scholar
-    df_found_items = find_new_ssids(staff_id_dict, staff_year_dict)
-    # Remove duplicates and items prior to 2015
-    df_found_items = df_found_items.drop_duplicates(subset=['ss_id'])
-   # df_found_items = df_found_items[df_found_items['ss_year']>=2015]
-    found_items = df_found_items['ss_id'].tolist()
-    found_dois = df_found_items['doi'].tolist()
-    
+    df_found_items = find_new_ssids()
+        
     # Extract ss_ids from the bib file
     actions_list = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
     # Find DOI matches
-    not_new, ss_id_match, list_doi_match, update_item, update_item_ssid = find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list)
+    to_add, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, actions_list)
+
     # Remove ss_ids that are already in bibfile and ss_id with doi match
-    to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
     new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
     
     # Remove blacklist items
     blacklist_path = CONFIG['output_dir'] / 'blacklist.csv'
     blacklist = pd.read_csv(blacklist_path)
+    
     # Normalize DOIs for both new_items and blacklist before filtering
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
