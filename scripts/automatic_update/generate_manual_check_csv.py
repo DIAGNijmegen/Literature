@@ -177,7 +177,7 @@ def find_new_ssids():
                     ss_year = int(ss_year)
                     if ss_year < CONFIG['min_year']:
                         continue
-                    if not staff_start <= ss_year <= staff_end + 5: 
+                    if not staff_start <= ss_year <= staff_end: 
                         continue
 
                 authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
