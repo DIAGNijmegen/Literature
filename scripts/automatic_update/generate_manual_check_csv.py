@@ -1,19 +1,33 @@
-import os
-import requests
-import pandas as pd 
-import string
 import sys
+import logging
 from pathlib import Path
-
-current_script_directory = Path(__file__).resolve().parent
-literature_update_scripts_directory = current_script_directory.parent
-sys.path.append(str(literature_update_scripts_directory))
-
-repo_root = literature_update_scripts_directory.parent
-
-from bib_handling_code.processbib import read_bibfile
-from difflib import SequenceMatcher
 from datetime import datetime
+import pandas as pd
+import requests
+from difflib import SequenceMatcher
+import string
+
+DATE = datetime.now().strftime("%Y%m%d")
+
+AUTOMATIC_UPDATE_DIR = Path(__file__).resolve().parent
+SCRIPTS_DIR = AUTOMATIC_UPDATE_DIR.parent
+REPO_ROOT = SCRIPTS_DIR.parent
+
+sys.path.append(str(SCRIPTS_DIR))
+from bib_handling_code.processbib import read_bibfile
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# (File) folders relative to repository root
+CONFIG = {
+    "bib_path": REPO_ROOT / "diag.bib",
+    "output_dir": SCRIPTS_DIR / "script_data",
+    "blacklist_path": SCRIPTS_DIR / "script_data" / "blacklist.csv",
+    "manual_check_path": SCRIPTS_DIR / "script_data" / f"manual_check_{DATE}.xlsx",
+    "retrieved_items_blacklisted_path": SCRIPTS_DIR / "script_data" / f"retrieved_blacklisted_items_{DATE}.xlsx",
+    "min_year": 2015,
+}
 
 staff_id_dict = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
 'Francesco Ciompi': [143613202, 2246376566, 2291304571, 2370540204],
@@ -61,24 +75,44 @@ staff_year_dict = {
 "Nadieh Khalili" : {'start' : 2023, 'end' : 9999}
 }
 
+def normalize_doi(doi):
+    # Convert to lowercase
+    doi = doi.lower()
+    # Remove 'https://doi.org/' if present
+    if doi.startswith("https://doi.org/"):
+        doi = doi[len("https://doi.org/"):]
+    return doi
 
-def remove_blacklist_items(df_new_items, blacklist_path, removed_items_output_path):
+
+def return_existing_dois(df_bib):
+    all_dois=[]
+    for idx, row in df_bib.iterrows():
+        if row['doi'] != '':
+            all_dois.append(normalize_doi(row['doi']))
+    return all_dois
+
+
+def save_excel(df, file_name, sort_by=None):
+    """Save DataFrame to an Excel file."""
+    if sort_by:
+        df = df.sort_values(by=sort_by)
+    df.to_excel(file_name, index=False)
+    logging.info(f"Saved DataFrame to {file_name}")
+
+
+def remove_blacklist_items(df_new_items, blacklist_path):
     """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
     blacklisted_items = pd.read_csv(blacklist_path)
-    initial_length = len(df_new_items)
 
     mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
     mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
 
     combined_mask = mask_ss_id | mask_ss_doi
-
     removed_items = df_new_items[combined_mask]
-    removed_items.to_excel(removed_items_output_path, index=False)
-
     df_new_items = df_new_items[~combined_mask]
 
-    print(f"{len(removed_items)} items removed from newly found items and saved to '{removed_items_output_path}'.")
-    return df_new_items
+    logging.info(f"{len(removed_items)} items removed from newly found items.")
+    return df_new_items, removed_items
 
 
 def from_bib_to_csv(diag_bib_raw):
@@ -159,38 +193,6 @@ def find_new_ssids(staff_id_dict, staff_year_dict):
 
     print('DONE')
     return df_all_staff_id_ss_data
-
-
-def return_existing_ssids(bib_file):
-    """Return existing Semantic Scholar IDs from the bib file."""
-    all_ss_ids=[]
-    for entry in bib_file:
-        if entry.type == 'string':
-            continue
-        if 'all_ss_ids' in entry.fields:
-            ss_ids = entry.fields['all_ss_ids'].translate(str.maketrans('', '', string.punctuation)).split(' ')
-            if len(ss_ids) > 1:
-                all_ss_ids.extend(ss_ids)
-            else:
-                all_ss_ids.append(ss_ids[0])
-    return all_ss_ids
-
-
-def normalize_doi(doi):
-    # Convert to lowercase
-    doi = doi.lower()
-    # Remove 'https://doi.org/' if present
-    if doi.startswith("https://doi.org/"):
-        doi = doi[len("https://doi.org/"):]
-    return doi
-
-
-def return_existing_dois(df_bib):
-    all_dois=[]
-    for idx, row in df_bib.iterrows():
-        if row['doi'] != '':
-            all_dois.append(normalize_doi(row['doi']))
-    return all_dois
 
 
 def find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list):
@@ -309,8 +311,7 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
 
 
 def main():
-    path_diag_bib = repo_root / 'diag.bib'
-    diag_bib_raw = read_bibfile(None, path_diag_bib)
+    diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     df_bib = from_bib_to_csv(diag_bib_raw)
     
     # Find items from semantic scholar
@@ -322,7 +323,6 @@ def main():
     found_dois = df_found_items['doi'].tolist()
     
     # Extract ss_ids from the bib file
-    existing_items = return_existing_ssids(diag_bib_raw)
     actions_list = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
     # Find DOI matches
     not_new, ss_id_match, list_doi_match, update_item, update_item_ssid = find_doi_match(df_bib, df_found_items, found_items, found_dois, actions_list)
@@ -331,13 +331,11 @@ def main():
     new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
     
     # Remove blacklist items
-    blacklist_path = literature_update_scripts_directory / 'script_data' / 'blacklist.csv'
+    blacklist_path = CONFIG['output_dir'] / 'blacklist.csv'
     blacklist = pd.read_csv(blacklist_path)
     # Normalize DOIs for both new_items and blacklist before filtering
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
-    dois = new_items['doi'].tolist()
-    ss_ids = new_items['ss_id'].tolist()
     
     # Find title matches, items without dois, new items
     list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib, actions_list)
@@ -346,15 +344,13 @@ def main():
     # Save manual check file
     columns = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
     df=pd.DataFrame(total_list, columns=columns)
-    current_date = datetime.now().strftime("%Y%m%d")
+
     # TODO: Save .csv instead of .xlsx
     # TODO: Define folder structure in config file/ above in the script
-    file_name = literature_update_scripts_directory / 'script_data' / f'manual_check_{current_date}.xlsx'
-    file_name_filtered = literature_update_scripts_directory / 'script_data' / f'removed_{current_date}.xlsx'
-    df = remove_blacklist_items(df, blacklist_path, file_name_filtered)
-    df=df.sort_values(['ss_id'])
-    df.to_excel(file_name, index=False)
+    df_new_items, removed_items = remove_blacklist_items(df, blacklist_path)
+    save_excel(removed_items, CONFIG['retrieved_items_blacklisted_path'])
+    save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
+
 
 if __name__ == "__main__":
     main()
-
