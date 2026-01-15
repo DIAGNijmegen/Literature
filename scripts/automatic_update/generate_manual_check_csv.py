@@ -20,6 +20,9 @@ from bib_handling_code.processbib import read_bibfile
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
+ACTIONS = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
+
 # (File) folders relative to repository root
 CONFIG = {
     "bib_path": REPO_ROOT / "diag.bib",
@@ -125,8 +128,8 @@ def remove_blacklist_items(df_new_items, blacklist_path):
     mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
 
     combined_mask = mask_ss_id | mask_ss_doi
-    removed_items = df_new_items[combined_mask]
-    df_new_items = df_new_items[~combined_mask]
+    removed_items = df_new_items[combined_mask].copy()
+    df_new_items = df_new_items[~combined_mask].copy()
 
     logging.info(f"{len(removed_items)} items removed from newly found items.")
     return df_new_items, removed_items
@@ -264,7 +267,10 @@ def find_doi_match(df_bib, df_found_items, actions_list):
                 list_doi_match.append((row.iloc[0], ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, doi, doi, row.iloc[2], ss_title, staff_id, staff_name, row.iloc[3], ss_authors, row.iloc[6], ss_journal_name, row.iloc[7], ss_year, row.iloc[1], pmid, 'doi match', actions_list))
     
     to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
-    return to_add, list_doi_match, update_item
+    
+    # Remove ss_ids that are already in bibfile and ss_id with doi match
+    new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
+    return new_items, list_doi_match, update_item
 
 
 def find_title_match_or_new_items(new_items, df_bib, actions_list):
@@ -331,38 +337,28 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
 
 
 def main():
+    #TODO: check out the double removal of blacklisted items
+
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     df_bib = from_bib_to_df(diag_bib_raw)
-    
+
     df_found_items = find_new_ssids()
-        
-    # Extract ss_ids from the bib file
-    actions_list = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
-    # Find DOI matches
-    to_add, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, actions_list)
-
-    # Remove ss_ids that are already in bibfile and ss_id with doi match
-    new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
+    new_items, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, ACTIONS)
     
-    # Remove blacklist items
-    blacklist_path = CONFIG['output_dir'] / 'blacklist.csv'
-    blacklist = pd.read_csv(blacklist_path)
-
-    # Normalize DOIs for both new_items and blacklist before filtering
+    blacklist = pd.read_csv(CONFIG['blacklist_path'])
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
     
     # Find title matches, items without dois, new items
-    list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib, actions_list)
+    list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib, ACTIONS)
+    
     total_list = list_to_add + list_no_dois + list_title_match + list_doi_match + update_item
 
-    # Save manual check file
     columns = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
     df=pd.DataFrame(total_list, columns=columns)
 
     # TODO: Save .csv instead of .xlsx
-    # TODO: Define folder structure in config file/ above in the script
-    df_new_items, removed_items = remove_blacklist_items(df, blacklist_path)
+    df_new_items, removed_items = remove_blacklist_items(df, CONFIG['blacklist_path'])
     save_excel(removed_items, CONFIG['retrieved_items_blacklisted_path'])
     save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
 
