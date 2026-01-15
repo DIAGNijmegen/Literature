@@ -1,4 +1,5 @@
 import sys
+import time
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -101,6 +102,21 @@ def save_excel(df, file_name, sort_by=None):
     logging.info(f"Saved DataFrame to {file_name}")
 
 
+def fetch_with_retry(url, max_retries=5):
+    wait = 1  # start with 1 second
+    for attempt in range(max_retries):
+        r = requests.get(url)
+        if r.status_code == 200:
+            return r
+        elif r.status_code == 429:
+            print(f"Rate limit hit. Waiting {wait}s...")
+            time.sleep(wait)
+            wait *= 2  # exponential backoff
+        else:
+            r.raise_for_status()
+    raise Exception(f"Failed after {max_retries} retries for {url}")
+
+
 def remove_blacklist_items(df_new_items, blacklist_path):
     """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
     blacklisted_items = pd.read_csv(blacklist_path)
@@ -149,8 +165,7 @@ def find_new_ssids():
             print('\t\t', staff_id)
 
             url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
-            r = requests.get(url)
-            r.raise_for_status()
+            r = fetch_with_retry(url)
 
             ss_staff_data = r.json().get('data', [])
 
@@ -332,7 +347,7 @@ def main():
     # Remove blacklist items
     blacklist_path = CONFIG['output_dir'] / 'blacklist.csv'
     blacklist = pd.read_csv(blacklist_path)
-    
+
     # Normalize DOIs for both new_items and blacklist before filtering
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
