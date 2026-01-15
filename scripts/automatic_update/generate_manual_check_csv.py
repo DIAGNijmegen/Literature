@@ -331,7 +331,7 @@ def main():
     new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
     
     # Remove blacklist items
-    blacklist_path = project_root / 'script_data' / 'blacklist.csv'
+    blacklist_path = literature_update_scripts_directory / 'script_data' / 'blacklist.csv'
     blacklist = pd.read_csv(blacklist_path)
     # Normalize DOIs for both new_items and blacklist before filtering
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
@@ -347,8 +347,10 @@ def main():
     columns = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
     df=pd.DataFrame(total_list, columns=columns)
     current_date = datetime.now().strftime("%Y%m%d")
-    file_name = os.path.join(project_root, 'script_data', f'manual_check_{current_date}.xlsx')
-    file_name_filtered = os.path.join(project_root, 'script_data', f'removed_{current_date}.xlsx')
+    # TODO: Save .csv instead of .xlsx
+    # TODO: Define folder structure in config file/ above in the script
+    file_name = literature_update_scripts_directory / 'script_data' / f'manual_check_{current_date}.xlsx'
+    file_name_filtered = literature_update_scripts_directory / 'script_data' / f'removed_{current_date}.xlsx'
     df = remove_blacklist_items(df, blacklist_path, file_name_filtered)
     df=df.sort_values(['ss_id'])
     df.to_excel(file_name, index=False)
