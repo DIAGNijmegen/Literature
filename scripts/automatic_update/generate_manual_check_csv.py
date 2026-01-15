@@ -75,6 +75,7 @@ staff_year_dict = {
 "Nadieh Khalili" : {'start' : 2023, 'end' : 9999}
 }
 
+
 def normalize_doi(doi):
     # Convert to lowercase
     doi = doi.lower()
@@ -115,52 +116,32 @@ def remove_blacklist_items(df_new_items, blacklist_path):
     return df_new_items, removed_items
 
 
-def from_bib_to_csv(diag_bib_raw):
-    """Convert bib file to a csv."""
-    bib_data = []
-    bib_columns = ['bibkey', 'type', 'title', 'authors', 'doi', 'gs_citations', 'journal', 'year', 'all_ss_ids', 'pmid']
-    
-    for bib_entry in diag_bib_raw:
-        if bib_entry.type == 'string':
-            continue
+def from_bib_to_df(diag_bib_raw):
+    """Convert bib file to a df."""
+    bib_fields = ['title', 'authors', 'doi', 'gscites', 'journal', 'year', 'all_ss_ids', 'pmid']
 
-        bibkey = bib_entry.key
-        bib_type = bib_entry.type
-        fields = bib_entry.fields
-        
-        bib_authors = fields.get('author', '').strip('{}')
-        bib_title = fields.get('title', '').strip('{}')
-        bib_doi = fields.get('doi', '').strip('{}')
-        bib_gscites = fields.get('gscites', '').strip('{}')
-        bib_journal = fields.get('journal', '').strip('{}')
-        bib_year = fields.get('year', '').strip('{}')
-        bib_all_ss_ids = fields.get('all_ss_ids', '').strip('{}')
-        bib_pmid = fields.get('pmid', '').strip('{}')
-        
-        bib_data.append([bibkey, bib_type, bib_title, bib_authors, bib_doi, bib_gscites, bib_journal, bib_year, bib_all_ss_ids, bib_pmid])
+    bib_data = [
+        [entry.key, entry.type, *(entry.fields.get(f, '').strip('{}') for f in bib_fields)]
+        for entry in diag_bib_raw
+        if entry.type != 'string'
+    ]
 
-    df_bib_data = pd.DataFrame(bib_data, columns=bib_columns)
-    return df_bib_data
+    columns = ['bibkey', 'type', *bib_fields]
+    return pd.DataFrame(bib_data, columns=columns)
 
 
-def find_new_ssids(staff_id_dict, staff_year_dict):
-    """
-    Find new items from Semantic Scholar, based on staff IDs and years.
-    Returns a DataFrame with all paper info for staff members.
-    """
-    all_staff_data = []
-    staff_items = [(name, staff_id_dict[name], staff_year_dict[name]) for name in staff_id_dict]
-
-    staff_dict = {key: {'ids': staff_id_dict[key], 'years': staff_year_dict[key]} for key in staff_id_dict}
+def find_new_ssids(staff_id_dict, year_dict):
+    """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
+   
+   # staff_dict = {key: {'ids': staff_id_dict[key], 'years': staff_year_dict[key]} for key in staff_id_dict}
     all_staff_id_ss_data = []
 
-    for idx, (staff_name, values) in enumerate(staff_dict.items()):
-        staff_ids = values['ids']
-        staff_start = values['years']['start']
-        staff_end = values['years']['end']
-        print(f'[{idx + 1}/{len(staff_id_dict)}]: {staff_name}')
+    for staff_name, values in staff_id_dict.items():
+        print('Processing staff member:', staff_name)
+        staff_year_dict = year_dict[staff_name]
+        staff_start, staff_end = staff_year_dict['start'],  staff_year_dict['end']
 
-        for staff_id in staff_ids:
+        for staff_id in values:
             print('\t\t', staff_id)
             staff_id_ss_data = []
 
@@ -312,7 +293,7 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
 
 def main():
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
-    df_bib = from_bib_to_csv(diag_bib_raw)
+    df_bib = from_bib_to_df(diag_bib_raw)
     
     # Find items from semantic scholar
     df_found_items = find_new_ssids(staff_id_dict, staff_year_dict)
