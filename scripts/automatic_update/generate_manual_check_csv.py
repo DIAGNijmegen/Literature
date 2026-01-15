@@ -132,45 +132,54 @@ def from_bib_to_df(diag_bib_raw):
 
 def find_new_ssids(staff_id_dict, year_dict):
     """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
-   
-   # staff_dict = {key: {'ids': staff_id_dict[key], 'years': staff_year_dict[key]} for key in staff_id_dict}
     all_staff_id_ss_data = []
 
-    for staff_name, values in staff_id_dict.items():
+    for staff_name, staff_ids in staff_id_dict.items():
         print('Processing staff member:', staff_name)
-        staff_year_dict = year_dict[staff_name]
-        staff_start, staff_end = staff_year_dict['start'],  staff_year_dict['end']
 
-        for staff_id in values:
+        staff_years = year_dict.get(staff_name)
+        if not staff_years:
+            logging.warning(f"No year information found for staff member: {staff_name}. Skipping.")
+            continue
+
+        staff_start = staff_years['start']
+        staff_end = staff_years['end']
+
+        for staff_id in staff_ids:
             print('\t\t', staff_id)
-            staff_id_ss_data = []
-
-            url = f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500'
+            
+            url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
             r = requests.get(url)
+            r.raise_for_status()
+
             ss_staff_data = r.json().get('data', [])
 
-            for ss_staff_entry in ss_staff_data:
-                ss_id = ss_staff_entry.get('paperId')
-                ss_title = ss_staff_entry.get('title')
-                ss_doi = ss_staff_entry['externalIds'].get('DOI')
-                ss_citations = ss_staff_entry.get('citationCount')
-                ss_year = ss_staff_entry.get('year')
-                pmid = ss_staff_entry['externalIds'].get('PubMed')
-                authors = ' and '.join([author['name'] for author in ss_staff_entry.get('authors', [])])
-                ss_journal = ss_staff_entry.get('journal', None)
-                ss_journal_name = ss_journal.get('name') if ss_journal else None
-                        
-                if ss_year != None:
+            for entry in ss_staff_data:
+                ss_year = entry.get('year')
+                if ss_year is not None:
                     ss_year = int(ss_year)
-                    if not staff_start <= ss_year <= staff_end:
-                    # probably doesnt belong to DIAG, still captured via another staff member if also in the same paper
+                    if ss_year < CONFIG['min_year']:
                         continue
-                staff_id_ss_data.append([staff_id, staff_name, staff_start, staff_end, ss_year, ss_id, ss_title, ss_doi, ss_citations, pmid, authors, ss_journal_name])
-                
-            all_staff_id_ss_data.extend(staff_id_ss_data)
+                    if not staff_start <= ss_year <= staff_end + 5: 
+                        continue
 
-    ss_columns = ['staff_id', 'staff_name', 'staff_from', 'staff_till', 'ss_year', 'ss_id', 'title', 'doi', 'ss_citations', 'pmid', 'authors', 'journal']
-    df_all_staff_id_ss_data = pd.DataFrame(all_staff_id_ss_data, columns=ss_columns)
+                authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
+                journal = entry.get('journal', None)
+                journal_name = journal.get('name') if journal else None
+
+                all_staff_id_ss_data.append([
+                    staff_id, staff_name, staff_start, staff_end, ss_year, 
+                    entry.get('paperId'), 
+                    entry.get('title'), 
+                    entry['externalIds'].get('DOI'), 
+                    entry.get('citationCount'), 
+                    entry['externalIds'].get('PubMed'), 
+                    authors, 
+                    journal_name
+                ])
+                
+    columns = ['staff_id', 'staff_name', 'staff_from', 'staff_till', 'ss_year', 'ss_id', 'title', 'doi', 'ss_citations', 'pmid', 'authors', 'journal']
+    df_all_staff_id_ss_data = pd.DataFrame(all_staff_id_ss_data, columns=columns)
 
     print('DONE')
     return df_all_staff_id_ss_data
@@ -299,7 +308,7 @@ def main():
     df_found_items = find_new_ssids(staff_id_dict, staff_year_dict)
     # Remove duplicates and items prior to 2015
     df_found_items = df_found_items.drop_duplicates(subset=['ss_id'])
-    df_found_items = df_found_items[df_found_items['ss_year']>=2015]
+   # df_found_items = df_found_items[df_found_items['ss_year']>=2015]
     found_items = df_found_items['ss_id'].tolist()
     found_dois = df_found_items['doi'].tolist()
     
