@@ -179,7 +179,6 @@ def find_doi_match(df_bib, df_found_items, actions_list):
     update_item = []        # Bib entry should be updated (e.g., arXiv to DOI)
     update_item_ssid = []   # ss_ids that will be updated.
 
-    found_dois = df_found_items['doi'].tolist()
     found_items = df_found_items['ss_id'].tolist()
 
     found_by_ssid = df_found_items.set_index('ss_id')
@@ -228,13 +227,14 @@ def find_doi_match(df_bib, df_found_items, actions_list):
 
             ss_doi = normalize_doi(ss_doi_raw)
             if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
-                update_item.append((bib_iloc0, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', 1, bib_doi, ss_doi, bib_iloc2, 
-                                    df_found_items[df_found_items['ss_id']==ss_id]['title'].item(), df_found_items[df_found_items['ss_id']==ss_id]['staff_id'].item(), 
-                                    df_found_items[df_found_items['ss_id']==ss_id]['staff_name'].item(), bib_iloc3, 
-                                    df_found_items[df_found_items['ss_id']==ss_id]['authors'].item(), bib_iloc6, 
-                                    df_found_items[df_found_items['ss_id']==ss_id]['journal'].item(), 
-                                    bib_iloc7, df_found_items[df_found_items['ss_id']==ss_id]['ss_year'].item(), bib_iloc1, 
-                                    df_found_items[df_found_items['ss_id']==ss_id]['pmid'].item(), 'update item', actions_list))
+                found = found_by_ssid.loc[ss_id]
+
+                update_item.append((bib_iloc0, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}',
+                                     1, bib_doi, ss_doi, bib_iloc2, found.title, found.staff_id, found.staff_name, bib_iloc3, 
+                                    found.authors, bib_iloc6, 
+                                    found.journal, 
+                                    bib_iloc7, found.ss_year, bib_iloc1, 
+                                    found.pmid, 'update item', actions_list))
                 update_item_ssid.append(ss_id)
             else:
                 not_new.append(ss_id)
@@ -249,10 +249,10 @@ def find_doi_match(df_bib, df_found_items, actions_list):
 
                 ss_title=found.title
                 ratio = SequenceMatcher(a=ss_title,b=bib_iloc2).ratio()
-                
+
                 ss_id_match.append(ss_id)
                 list_doi_match.append((bib_iloc0, ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, bib_doi, bib_doi, bib_iloc2, ss_title, int(found.staff_id), 
-                                       found.staff_name, bib_iloc3, found.authors, bib_iloc6, found.journal, bib_iloc7, int(found_items.ss_year), bib_iloc1, found.pmid, 'doi match', 
+                                       found.staff_name, bib_iloc3, found.authors, bib_iloc6, found.journal, bib_iloc7, int(found.ss_year), bib_iloc1, found.pmid, 'doi match', 
                                        actions_list))
     
     to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
