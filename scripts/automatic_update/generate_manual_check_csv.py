@@ -7,18 +7,17 @@ import pandas as pd
 import requests
 from difflib import SequenceMatcher
 import string
+import yaml
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 DATE = datetime.now().strftime("%Y%m%d")
-
 AUTOMATIC_UPDATE_DIR = Path(__file__).resolve().parent
 SCRIPTS_DIR = AUTOMATIC_UPDATE_DIR.parent
 REPO_ROOT = SCRIPTS_DIR.parent
 
 sys.path.append(str(SCRIPTS_DIR))
 from bib_handling_code.processbib import read_bibfile
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 ACTIONS = '[add ss_id, blacklist ss_id, add new item, add manually, update_item, None]'
 
@@ -32,51 +31,12 @@ CONFIG = {
     "min_year": 2015,
 }
 
-STAFF_IDS = {'Bram van Ginneken': [8038506, 123637526, 2238811617, 2237665783, 2064076416],
-'Francesco Ciompi': [143613202, 2246376566, 2291304571, 2370540204],
-'Alessa Hering': [153744566],
-'Henkjan Huisman': [34754023, 2247422768, 2242473717, 2275450757],
-'Colin Jacobs': [2895994, 2281807058, 2331492473, 2262970009, 2368325830],
-'Peter Koopmans': [34726383],
-'Jeroen van der Laak': [145441238, 145388932, 2347447, 2255290517, 2259038560],
-'Geert Litjens': [145959882],
-'James Meakin': [4960344],
-'Keelin Murphy': [35730362],
-'Ajay Patel': [2109170880, 2116215861],
-'Cornelia Schaefer-Prokop': [1419819133, 1445069528, 1400632685, 2242581221, 2262278647, 2240604857, 2250313247],
-'Matthieu Rutten': [2074975080, 2156546, 47920520, 2238355627, 2239745868],
-'Jos Thannhauser': [5752941],
-"Bram Platel" : [1798137], 
-"Nico Karssemeijer" : [1745574], 
-"Clarisa Sanchez" : [144085811, 32187701], 
-"Nikolas Lessman" : [2913408], 
-"Jonas Teuwen" : [32649341, 119024451, 2259899370], 
-"Rashindra Manniesing" : [2657081],
-"Nadieh Khalili": [144870959]}
+CONFIG_FILE = AUTOMATIC_UPDATE_DIR / "config.yaml"
+with open(CONFIG_FILE, "r") as file:
+    config_data = yaml.safe_load(file)
 
-STAFF_YEARS = {
-'Bram van Ginneken':  {'start' : 1996, 'end': 9999},
-'Francesco Ciompi':  {'start' : 2013, 'end': 9999},
-'Alessa Hering':  {'start' : 2018, 'end': 9999},
-'Henkjan Huisman':  {'start' : 1992, 'end': 9999},
-'Colin Jacobs':  {'start' : 2010, 'end': 9999},
-'Peter Koopmans':  {'start' : 2022, 'end': 9999},
-'Jeroen van der Laak':  {'start' : 1991, 'end': 9999},
-'Geert Litjens':  {'start' : 2016, 'end': 9999},
-'James Meakin':  {'start' : 2017, 'end': 9999},
-'Keelin Murphy':  {'start' : 2018, 'end': 9999},
-'Ajay Patel':  {'start' : 2015, 'end': 9999},
-'Cornelia Schaefer-Prokop':  {'start' : 2010, 'end': 9999},
-'Matthieu Rutten':  {'start' : 2019, 'end': 9999},
-'Jos Thannhauser': {'start' : 2022, 'end': 9999},
-"Bram Platel" : {'start' : 2010,  'end' : 2019},
-"Nico Karssemeijer" : {'start' : 1989, 'end' : 2022}, 
-"Clarisa Sanchez" : {'start' : 2008, 'end' : 2021}, 
-"Nikolas Lessman" : {'start' : 2019, 'end' : 2022}, 
-"Jonas Teuwen" : {'start' : 2017, 'end' : 2020}, 
-"Rashindra Manniesing" : {'start' : 2010, 'end' : 2021},
-"Nadieh Khalili" : {'start' : 2023, 'end' : 9999}
-}
+STAFF_IDS = config_data["STAFF_IDS"]
+STAFF_YEARS = config_data["STAFF_YEARS"]
 
 
 def normalize_doi(doi):
@@ -222,54 +182,145 @@ def find_doi_match(df_bib, df_found_items, actions_list):
     found_dois = df_found_items['doi'].tolist()
     found_items = df_found_items['ss_id'].tolist()
 
+    found_by_ssid = df_found_items.set_index('ss_id')
+    found_items_set = set(found_by_ssid.index)
+
+    found_doi_to_ssid = {
+        doi: ss_id
+        for ss_id, doi in zip(df_found_items['ss_id'], df_found_items['doi'])
+        if doi
+    }
 
     all_dois = return_existing_dois(df_bib)
-    for index, row in df_bib.iterrows():
-        doi = row.iloc[4]
-        ss_ids = row.iloc[8]
-        all_ss_ids = []
-        if ss_ids is not None:
-            all_ss_ids = ss_ids.split(',')
-            for i, el in enumerate(all_ss_ids):
-                all_ss_ids[i] = el.translate(str.maketrans('', '', string.punctuation)).strip()
-        
-        # Check if any existing bib-item has the same ss_id as an item on found_items 
+
+    for _, row in df_bib.iterrows():
+        bib_iloc0 = row.iloc[0]
+        bib_iloc1 = row.iloc[1]
+        bib_iloc2 = row.iloc[2]
+        bib_iloc3 = row.iloc[3]
+        bib_doi_raw = row.iloc[4]
+        bib_iloc6= row.iloc[6]
+        bib_iloc7 = row.iloc[7]
+        bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
+
+        ss_ids_raw = row.iloc[8]
+
+        if ss_ids_raw:
+            all_ss_ids = [
+                el.translate(str.maketrans('', '', string.punctuation)).strip()
+                for el in ss_ids_raw.split(',')
+                if el.strip()
+            ]
+        else:
+            all_ss_ids = []
+
+        # Check if any existing bib-item has the same ss_id as an item on found_items_set 
         for ss_id in all_ss_ids:
-            if ss_id in found_items:
-                ss_doi = df_found_items[df_found_items['ss_id'] == ss_id]['doi'].item()
-                if ss_doi:
-                    ss_doi = normalize_doi(ss_doi)
-                    doi = normalize_doi(doi)
-                    if ss_doi != doi and ss_doi not in all_dois and (doi == '' or 'arxiv' in doi):
-                        update_item.append((row.iloc[0], ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', 1, doi, ss_doi, row.iloc[2], df_found_items[df_found_items['ss_id']==ss_id]['title'].item(), df_found_items[df_found_items['ss_id']==ss_id]['staff_id'].item(), df_found_items[df_found_items['ss_id']==ss_id]['staff_name'].item(), row.iloc[3], df_found_items[df_found_items['ss_id']==ss_id]['authors'].item(), row.iloc[6], df_found_items[df_found_items['ss_id']==ss_id]['journal'].item(), row.iloc[7], df_found_items[df_found_items['ss_id']==ss_id]['ss_year'].item(), row.iloc[1], df_found_items[df_found_items['ss_id']==ss_id]['pmid'].item(), 'update item', actions_list))
-                        update_item_ssid.append(ss_id)
-                    else:
-                        not_new.append(ss_id)
-                else:
-                    not_new.append(ss_id)
+            if not ss_id in found_items_set:
+                continue 
             
+            found = found_by_ssid.loc[ss_id]
+            ss_doi_raw = found.doi
+
+            if not ss_doi_raw:
+                not_new.append(ss_id)
+                continue
+
+            ss_doi = normalize_doi(ss_doi_raw)
+            if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
+                update_item.append((bib_iloc0, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', 1, bib_doi, ss_doi, bib_iloc2, 
+                                    df_found_items[df_found_items['ss_id']==ss_id]['title'].item(), df_found_items[df_found_items['ss_id']==ss_id]['staff_id'].item(), 
+                                    df_found_items[df_found_items['ss_id']==ss_id]['staff_name'].item(), bib_iloc3, 
+                                    df_found_items[df_found_items['ss_id']==ss_id]['authors'].item(), bib_iloc6, 
+                                    df_found_items[df_found_items['ss_id']==ss_id]['journal'].item(), 
+                                    bib_iloc7, df_found_items[df_found_items['ss_id']==ss_id]['ss_year'].item(), bib_iloc1, 
+                                    df_found_items[df_found_items['ss_id']==ss_id]['pmid'].item(), 'update item', actions_list))
+                update_item_ssid.append(ss_id)
+            else:
+                not_new.append(ss_id)
+
         # Check if any existing bib-item has the same doi as an item on found_items
-        if doi is not None and doi in found_dois:
-            idx = found_dois.index(doi)
-            ss_id = found_items[idx]
+        if bib_doi and bib_doi in found_doi_to_ssid:
+            ss_id = found_doi_to_ssid[bib_doi]
+
             # Check if that bib-item is already linked with the ss_id
             if ss_id not in all_ss_ids:
-                pmid=df_found_items[df_found_items['ss_id'] ==ss_id]['pmid'].item()
-                ss_title=df_found_items[df_found_items['ss_id']==ss_id]['title'].item()
-                ss_authors = df_found_items[df_found_items['ss_id']==ss_id]['authors'].item()
-                ss_journal_name = df_found_items[df_found_items['ss_id']==ss_id]['journal'].item()
-                ss_year = int(df_found_items[df_found_items['ss_id']==ss_id]['ss_year'].item())
-                staff_id = int(df_found_items[df_found_items['ss_id']==ss_id]['staff_id'].item())
-                staff_name = df_found_items[df_found_items['ss_id']==ss_id]['staff_name'].item()
-                ratio = SequenceMatcher(a=ss_title,b=row.iloc[2]).ratio()
+                found = found_by_ssid.loc[ss_id]
+
+                ss_title=found.title
+                ratio = SequenceMatcher(a=ss_title,b=bib_iloc2).ratio()
+                
                 ss_id_match.append(ss_id)
-                list_doi_match.append((row.iloc[0], ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, doi, doi, row.iloc[2], ss_title, staff_id, staff_name, row.iloc[3], ss_authors, row.iloc[6], ss_journal_name, row.iloc[7], ss_year, row.iloc[1], pmid, 'doi match', actions_list))
+                list_doi_match.append((bib_iloc0, ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, bib_doi, bib_doi, bib_iloc2, ss_title, int(found.staff_id), 
+                                       found.staff_name, bib_iloc3, found.authors, bib_iloc6, found.journal, bib_iloc7, int(found_items.ss_year), bib_iloc1, found.pmid, 'doi match', 
+                                       actions_list))
     
     to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
     
     # Remove ss_ids that are already in bibfile and ss_id with doi match
     new_items = df_found_items[df_found_items['ss_id'].isin(to_add)]
     return new_items, list_doi_match, update_item
+
+def classify_found_item(df_bib, found_item):
+    """
+    Classify a single found item against the bib file.
+
+    Args:
+        df_bib (DataFrame)
+        found_item (dict-like or Series):
+            must contain at least: ss_id, doi, title
+
+    Returns:
+        category (str): one of {'not_new', 'update_item', 'doi_match', 'new_item'}
+        info (dict | None): minimal info needed by the caller
+    """
+
+    ss_id = found_item['ss_id']
+    ss_doi = normalize_doi(found_item['doi']) if found_item['doi'] else ''
+    ss_title = found_item['title']
+
+    all_dois = return_existing_dois(df_bib)
+
+    for _, row in df_bib.iterrows():
+        bib_doi = normalize_doi(row.iloc[4]) if row.iloc[4] else ''
+        ss_ids = row.iloc[8]
+
+        all_ss_ids = []
+        if ss_ids:
+            all_ss_ids = [
+                el.translate(str.maketrans('', '', string.punctuation)).strip()
+                for el in ss_ids.split(',')
+            ]
+
+        # 1. SS ID already known
+        if ss_id in all_ss_ids:
+            if ss_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
+                return (
+                    'update_item',
+                    {
+                        'bib_id': row.iloc[0],
+                        'ss_id': ss_id,
+                        'old_doi': bib_doi,
+                        'new_doi': ss_doi
+                    }
+                )
+            else:
+                return ('not_new', {'ss_id': ss_id})
+
+        # 2. DOI match, SS ID not linked yet
+        if bib_doi and ss_doi and bib_doi == ss_doi:
+            ratio = SequenceMatcher(a=ss_title, b=row.iloc[2]).ratio()
+            return (
+                'doi_match',
+                {
+                    'bib_id': row.iloc[0],
+                    'ss_id': ss_id,
+                    'similarity': ratio
+                }
+            )
+    # 3. Brand-new item
+    return ('new_item', None)
+
 
 
 def find_title_match_or_new_items(new_items, df_bib, actions_list):
@@ -337,7 +388,6 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
 
 def main():
     #TODO: check out the double removal of blacklisted items
-
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     df_bib = from_bib_to_df(diag_bib_raw)
 
