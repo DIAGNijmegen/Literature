@@ -40,6 +40,8 @@ STAFF_YEARS = config_data["STAFF_YEARS"]
 
 
 def normalize_doi(doi):
+    if not doi:
+        return ''
     # Convert to lowercase
     doi = doi.lower()
     # Remove 'https://doi.org/' if present
@@ -117,12 +119,34 @@ def entry_withing_valid_time(ss_year, staff_start, staff_end):
     return True
 
 
+def preprocess_bib(df_bib):
+    all_dois = set()
+    doi_to_row = {}
+    ssid_to_row = {}
+
+    for _, row in df_bib.iterrows():
+        bib_doi_raw = row.iloc[4]
+        bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
+        if bib_doi:
+            all_dois.add(bib_doi)
+            doi_to_row[bib_doi] = row
+
+        ss_ids_raw = row.iloc[8]
+        all_ss_ids = [x.strip() for x in (ss_ids_raw or '').replace(',', ' ').split() if x.strip()]
+        for ssid in all_ss_ids:
+            ssid_to_row[ssid] = row
+
+    return all_dois, doi_to_row, ssid_to_row
+
+
 def find_new_ssids(df_bib):
     """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
     new_items = []
     doi_matches = []
     update_items = []
     not_new = []
+
+    all_dois, doi_to_row, ssid_to_row = preprocess_bib(df_bib)
 
     for staff_name, staff_ids in STAFF_IDS.items():
         print('Processing staff member:', staff_name)
@@ -167,7 +191,7 @@ def find_new_ssids(df_bib):
                 }
                                 
                                 
-                category, info = find_doi_match(df_bib, found_item)
+                category, info = find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item)
                 
                 if category == 'new_item':
                     new_items.append([
@@ -193,68 +217,53 @@ def find_new_ssids(df_bib):
     return new_items, doi_matches, update_items
 
 
-def find_doi_match(df_bib, found_item):
+def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
     """Find DOI matches between the bib items and found items."""
     
-    all_dois = return_existing_dois(df_bib)
+    ss_id = found_item['ss_id']
+    ss_doi = normalize_doi(found_item['doi'])
 
-    for _, row in df_bib.iterrows():
-        bib_iloc0 = row.iloc[0]
-        bib_iloc1 = row.iloc[1]
-        bib_iloc2 = row.iloc[2]
-        bib_iloc3 = row.iloc[3]
+    # Match by staff ID
+    if ss_id in ssid_to_row:
+        row = ssid_to_row[ss_id]
         bib_doi_raw = row.iloc[4]
-        bib_iloc6= row.iloc[6]
-        bib_iloc7 = row.iloc[7]
         bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
 
-        ss_ids_raw = row.iloc[8]
-
-        if ss_ids_raw:
-            all_ss_ids = [
-                el.translate(str.maketrans('', '', string.punctuation)).strip()
-                for el in ss_ids_raw.split(',')
-                if el.strip()
-            ]
+        if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
+            return 'update_item', _build_update_row(row, found_item)
         else:
-            all_ss_ids = []
-
-        # Check if any existing bib-item has the same ss_id as an item on found_items_set 
-        for ss_id in all_ss_ids:
-            if not ss_id in list(found_item.ss_id):
-                continue 
-            
-            found = found_item
-            ss_doi_raw = found.doi
-
-            ss_doi = normalize_doi(ss_doi_raw)
-            if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
-                row = (bib_iloc0, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}',
-                                     1, bib_doi, ss_doi, bib_iloc2, found.title, found.staff_id, found.staff_name, bib_iloc3, 
-                                    found.authors, bib_iloc6, 
-                                    found.journal, 
-                                    bib_iloc7, found.ss_year, bib_iloc1, 
-                                    found.pmid, 'update item', ACTIONS)
-                return('update_item', row)
-            else:
-                return('not_new', ss_id)
-
-        # Check if any existing bib-item has the same doi as an item on found_items
-        print('found item ', found_item)
-        if bib_doi and bib_doi in list(found_item['doi']):
-            ss_id = found.ss_id
-
-            # Check if that bib-item is already linked with the ss_id
-            if ss_id not in all_ss_ids:
-                ss_title=found.title
-                ratio = SequenceMatcher(a=ss_title,b=bib_iloc2).ratio()
-
-                row =(bib_iloc0, ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, bib_doi, bib_doi, bib_iloc2, ss_title, int(found.staff_id), 
-                                       found.staff_name, bib_iloc3, found.authors, bib_iloc6, found.journal, bib_iloc7, int(found.ss_year), bib_iloc1, found.pmid, 'doi match', 
-                                       ACTIONS)
-                return 'doi_match', row
+            return 'not_new', ss_id
+    
+    # Match by DOI
+    if ss_doi and ss_doi in doi_to_row:
+        row = doi_to_row[ss_doi]
+        bib_iloc2 = row.iloc[2]
+        ss_title = found_item['title']
+        ratio = SequenceMatcher(a=ss_title, b=bib_iloc2).ratio()
+        return 'doi_match', _build_doi_match_row(row, found_item, ratio)
             
     return 'new_item', None
+
+def _build_update_row(row, found_item):
+    return (
+        row.iloc[0], found_item['ss_id'], f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
+        1, row.iloc[4], found_item['doi'], row.iloc[2], found_item['title'],
+        found_item['staff_id'], found_item['staff_name'], row.iloc[3],
+        found_item['authors'], row.iloc[6], found_item['journal'],
+        row.iloc[7], found_item['ss_year'], row.iloc[1], found_item['pmid'],
+        'update item', ACTIONS
+    )
+
+
+def _build_doi_match_row(row, found_item, ratio):
+    return (
+        row.iloc[0], found_item['ss_id'], f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
+        ratio, row.iloc[4], row.iloc[4], row.iloc[2], found_item['title'],
+        found_item['staff_id'], found_item['staff_name'], row.iloc[3],
+        found_item['authors'], row.iloc[6], found_item['journal'],
+        row.iloc[7], found_item['ss_year'], row.iloc[1], found_item['pmid'],
+        'doi match', ACTIONS
+    )
 
 def find_title_match_or_new_items(new_items, df_bib):
     """Find title matches or new items between the bib file and found items."""
