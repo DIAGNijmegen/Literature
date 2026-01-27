@@ -107,10 +107,23 @@ def from_bib_to_df(diag_bib_raw):
     columns = ['bibkey', 'type', *bib_fields]
     return pd.DataFrame(bib_data, columns=columns)
 
+def entry_withing_valid_time(ss_year, staff_start, staff_end):
+    if ss_year is not None:
+        ss_year = int(ss_year)
+        if ss_year < CONFIG['min_year']:
+            return False
+        if not staff_start <= ss_year <= staff_end: 
+            return False
+    return True
 
-def find_new_ssids():
+
+def find_new_ssids(df_bib):
     """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
     all_staff_id_ss_data = []
+
+    doi_matches = []
+    update_items = []
+    not_new_ids = []
 
     for staff_name, staff_ids in STAFF_IDS.items():
         print('Processing staff member:', staff_name)
@@ -128,21 +141,37 @@ def find_new_ssids():
 
             url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
             r = fetch_with_retry(url)
-
             ss_staff_data = r.json().get('data', [])
 
             for entry in ss_staff_data:
                 ss_year = entry.get('year')
-                if ss_year is not None:
-                    ss_year = int(ss_year)
-                    if ss_year < CONFIG['min_year']:
-                        continue
-                    if not staff_start <= ss_year <= staff_end: 
-                        continue
+                if not entry_withing_valid_time(ss_year, staff_start, staff_end):
+                    continue
 
                 authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
                 journal = entry.get('journal', None)
                 journal_name = journal.get('name') if journal else None
+
+                found_item = {
+                    'staff_id': staff_id,
+                    'staff_name': staff_name,
+                    'staff_from': staff_start,
+                    'staff_till': staff_end,
+                    'ss_year': ss_year,
+                    'ss_id': entry.get('paperId'),
+                    'title': entry.get('title'),
+                    'doi': entry['externalIds'].get('DOI'),
+                    'ss_citations': entry.get('citationCount'),
+                    'pmid': entry['externalIds'].get('PubMed'),
+                    'authors': authors,
+                    'journal': journal_name,
+                }
+                                
+                                
+                category, info = find_doi_match(df_bib, found_item, action_list)
+
+                
+
 
                 all_staff_id_ss_data.append([
                     staff_id, staff_name, staff_start, staff_end, ss_year, 
@@ -157,20 +186,12 @@ def find_new_ssids():
                 
     columns = ['staff_id', 'staff_name', 'staff_from', 'staff_till', 'ss_year', 'ss_id', 'title', 'doi', 'ss_citations', 'pmid', 'authors', 'journal']
     df_all_staff_id_ss_data = pd.DataFrame(all_staff_id_ss_data, columns=columns)
-   # df_all_staff_id_ss_data = df_all_staff_id_ss_data.drop_duplicates(subset=['ss_id'])
-
-    df_all_staff_id_ss_data = (
-        df_all_staff_id_ss_data
-        .sort_values(by=['ss_id', 'staff_id'])
-        .drop_duplicates(subset=['ss_id'], keep='first')
-        .reset_index(drop=True)
-    )
 
     print('DONE')
     return df_all_staff_id_ss_data
 
 
-def find_doi_match(df_bib, df_found_items, actions_list):
+def find_doi_match(df_bib, df_found_items):
     """Find DOI matches between the bib items and found items."""
     
     list_doi_match = []     # Bib entry & SS paper matched by DOI
@@ -234,7 +255,7 @@ def find_doi_match(df_bib, df_found_items, actions_list):
                                     found.authors, bib_iloc6, 
                                     found.journal, 
                                     bib_iloc7, found.ss_year, bib_iloc1, 
-                                    found.pmid, 'update item', actions_list))
+                                    found.pmid, 'update item', ACTIONS))
                 update_item_ssid.append(ss_id)
             else:
                 not_new.append(ss_id)
@@ -253,7 +274,7 @@ def find_doi_match(df_bib, df_found_items, actions_list):
                 ss_id_match.append(ss_id)
                 list_doi_match.append((bib_iloc0, ss_id, 'https://www.semanticscholar.org/paper/'+ss_id, ratio, bib_doi, bib_doi, bib_iloc2, ss_title, int(found.staff_id), 
                                        found.staff_name, bib_iloc3, found.authors, bib_iloc6, found.journal, bib_iloc7, int(found.ss_year), bib_iloc1, found.pmid, 'doi match', 
-                                       actions_list))
+                                       ACTIONS))
     
     to_add = set(found_items)-set(not_new)-set(ss_id_match)-set(update_item_ssid)
     
@@ -323,7 +344,7 @@ def classify_found_item(df_bib, found_item):
 
 
 
-def find_title_match_or_new_items(new_items, df_bib, actions_list):
+def find_title_match_or_new_items(new_items, df_bib):
     """Find title matches or new items between the bib file and found items."""
     
     titles = new_items['title'].tolist()
@@ -363,7 +384,7 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
                     new_items[new_items['ss_id'] == ss_id]['ss_year'].item(),
                     match['type'],
                     new_items[new_items['ss_id'] == ss_id]['pmid'].item(),
-                    'title match', actions_list))
+                    'title match', ACTIONS))
         else:
             max_bib_entry = df_bib[title_match_ratios == max_ratio]
             authors = max_bib_entry['authors'].iloc[0]
@@ -380,9 +401,11 @@ def find_title_match_or_new_items(new_items, df_bib, actions_list):
             ss_pmid = new_items[new_items['ss_id'] == ss_id]['pmid'].item()
             
             if doi is None:
-                list_no_dois.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'doi None', actions_list))
+                list_no_dois.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, 
+                                     staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'doi None', ACTIONS))
             else:
-                list_to_add.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'new item', actions_list))
+                list_to_add.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, 
+                                    staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'new item', ACTIONS))
     return list_title_match, list_no_dois, list_to_add
 
 
@@ -391,15 +414,15 @@ def main():
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     df_bib = from_bib_to_df(diag_bib_raw)
 
-    df_found_items = find_new_ssids()
-    new_items, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, ACTIONS)
+    new_items, list_doi_match, update_item = find_new_ssids(df_bib)
+   # new_items, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, ACTIONS)
     
     blacklist = pd.read_csv(CONFIG['blacklist_path'])
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
     
     # Find title matches, items without dois, new items
-    list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib, ACTIONS)
+    list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib)
     
     total_list = list_to_add + list_no_dois + list_title_match + list_doi_match + update_item
 
