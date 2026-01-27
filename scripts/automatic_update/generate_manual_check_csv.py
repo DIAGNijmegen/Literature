@@ -171,51 +171,69 @@ def find_new_ssids(df_bib):
                 if not entry_withing_valid_time(ss_year, staff_start, staff_end):
                     continue
 
-                authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
-                journal = entry.get('journal', None)
-                journal_name = journal.get('name') if journal else None
-
-                found_item = {
-                    'staff_id': staff_id,
-                    'staff_name': staff_name,
-                    'staff_from': staff_start,
-                    'staff_till': staff_end,
-                    'ss_year': ss_year,
-                    'ss_id': entry.get('paperId'),
-                    'title': entry.get('title'),
-                    'doi': entry['externalIds'].get('DOI'),
-                    'ss_citations': entry.get('citationCount'),
-                    'pmid': entry['externalIds'].get('PubMed'),
-                    'authors': authors,
-                    'journal': journal_name,
-                }
-                                
-                                
+                found_item = get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year)     
                 category, info = find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item)
                 
                 if category == 'new_item':
-                    new_items.append([
-                        staff_id, staff_name, staff_start, staff_end, ss_year, 
-                        entry.get('paperId'), 
-                        entry.get('title'), 
-                        entry['externalIds'].get('DOI'), 
-                        entry.get('citationCount'), 
-                        entry['externalIds'].get('PubMed'), 
-                        authors, 
-                        journal_name
-                    ])
+                    new_items.append(found_item)
                 elif category == 'update_item':
-                    #update_items.append({**found_item, **info})
                     update_items.append(info)
                 elif category == 'doi_match':
-                    #doi_matches.append({**found_item, **info})
                     doi_matches.append(info)
                 elif category == 'not_new':
-                    #not_new_ids.append(info['ss_id'])
                     not_new.append(info)
 
-    return new_items, doi_matches, update_items
+    new_items_df = pd.DataFrame(new_items).drop_duplicates(subset=['ss_id'])
+    doi_matches_df = pd.DataFrame(doi_matches).drop_duplicates(subset=['ss_id'])
+    update_items_df = pd.DataFrame(update_items).drop_duplicates(subset=['ss_id'])
 
+    return new_items_df, doi_matches_df, update_items_df
+
+def get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year):
+    authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
+    journal = entry.get('journal', None)
+    journal_name = journal.get('name') if journal else None
+
+    found_item = {
+        'staff_id': staff_id,
+        'staff_name': staff_name,
+        'staff_from': staff_start,
+        'staff_till': staff_end,
+        'ss_year': ss_year,
+        'ss_id': entry.get('paperId'),
+        'title': entry.get('title'),
+        'doi': entry['externalIds'].get('DOI'),
+        'ss_citations': entry.get('citationCount'),
+        'pmid': entry['externalIds'].get('PubMed'),
+        'authors': authors,
+        'journal': journal_name,
+    }           
+    return found_item
+                
+def _build_row(row, found_item, ratio, reason):
+    #TODO: replace the iloc
+    return {
+        'bibkey': row.iloc[0], 
+        'ss_id' : found_item['ss_id'], 
+        'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
+        'match_score': ratio, 
+        'bib_doi': row.iloc[4], 
+        'ss_doi': row.iloc[4], 
+        'bib_title': row.iloc[2], 
+        'ss_title': found_item['title'],
+        'staff_id': found_item['staff_id'], 
+        'staff_name': found_item['staff_name'], 
+        'bib_authors': row.iloc[3],
+        'ss_authors': found_item['authors'], 
+        'bib_journal': row.iloc[6], 
+        'ss_journal': found_item['journal'],
+        'bib_year': row.iloc[7], 
+        'ss_year': found_item['ss_year'], 
+        'bib_type': row.iloc[1], 
+        'ss_pmid': found_item['pmid'],
+        'reason': reason, 
+        'actionn': ACTIONS
+    }
 
 def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
     """Find DOI matches between the bib items and found items."""
@@ -230,7 +248,7 @@ def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
         bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
 
         if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
-            return 'update_item', _build_update_row(row, found_item)
+            return 'update_item', _build_row(row, found_item, 1, 'update_item')
         else:
             return 'not_new', ss_id
     
@@ -240,30 +258,10 @@ def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
         bib_iloc2 = row.iloc[2]
         ss_title = found_item['title']
         ratio = SequenceMatcher(a=ss_title, b=bib_iloc2).ratio()
-        return 'doi_match', _build_doi_match_row(row, found_item, ratio)
+        return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
             
     return 'new_item', None
 
-def _build_update_row(row, found_item):
-    return (
-        row.iloc[0], found_item['ss_id'], f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
-        1, row.iloc[4], found_item['doi'], row.iloc[2], found_item['title'],
-        found_item['staff_id'], found_item['staff_name'], row.iloc[3],
-        found_item['authors'], row.iloc[6], found_item['journal'],
-        row.iloc[7], found_item['ss_year'], row.iloc[1], found_item['pmid'],
-        'update item', ACTIONS
-    )
-
-
-def _build_doi_match_row(row, found_item, ratio):
-    return (
-        row.iloc[0], found_item['ss_id'], f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
-        ratio, row.iloc[4], row.iloc[4], row.iloc[2], found_item['title'],
-        found_item['staff_id'], found_item['staff_name'], row.iloc[3],
-        found_item['authors'], row.iloc[6], found_item['journal'],
-        row.iloc[7], found_item['ss_year'], row.iloc[1], found_item['pmid'],
-        'doi match', ACTIONS
-    )
 
 def find_title_match_or_new_items(new_items, df_bib):
     """Find title matches or new items between the bib file and found items."""
@@ -331,21 +329,32 @@ def find_title_match_or_new_items(new_items, df_bib):
 
 
 def main():
-    #TODO: check out the double removal of blacklisted items
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
+    logging.info(f"Bib file read: {len(diag_bib_raw)} entries")
+
     df_bib = from_bib_to_df(diag_bib_raw)
+    logging.info(f"Converted to DataFrame: {len(df_bib)} rows")
 
     new_items, list_doi_match, update_item = find_new_ssids(df_bib)
-   # new_items, list_doi_match, update_item = find_doi_match(df_bib, df_found_items, ACTIONS)
-    
+    logging.info(f"New items: {len(new_items)}, DOI matches: {len(list_doi_match)}, Updates: {len(update_item)}")
+
     blacklist = pd.read_csv(CONFIG['blacklist_path'])
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
+    new_items_before_blacklist = len(new_items)
     new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
-    
-    # Find title matches, items without dois, new items
+    logging.info(f"Removed {new_items_before_blacklist - len(new_items)} blacklisted DOIs")
+
     list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib)
     
-    total_list = list_to_add + list_no_dois + list_title_match + list_doi_match + update_item
+    logging.info(f"Title matches: {len(list_title_match)}, No DOI: {len(list_no_dois)}, To add: {len(list_to_add)}, DOI match: {len(list_doi_match)}, update items {len(update_item)}")
+    total_list = (
+        to_list_of_dicts(list_to_add)
+        + to_list_of_dicts(list_no_dois)
+        + to_list_of_dicts(list_title_match)
+        + to_list_of_dicts(list_doi_match)
+        + to_list_of_dicts(update_item)
+    )
+    logging.info(f"Total items to write: {len(total_list)}")
 
     columns = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
     df=pd.DataFrame(total_list, columns=columns)
@@ -354,6 +363,17 @@ def main():
     df_new_items, removed_items = remove_blacklist_items(df, CONFIG['blacklist_path'])
     save_excel(removed_items, CONFIG['retrieved_items_blacklisted_path'])
     save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
+
+
+def to_list_of_dicts(x):
+    if isinstance(x, pd.DataFrame):
+        return x.to_dict(orient="records")
+    elif isinstance(x, list):
+        return x
+    elif x is None:
+        return []
+    else:
+        raise TypeError(f"Unexpected type: {type(x)}")
 
 
 if __name__ == "__main__":
