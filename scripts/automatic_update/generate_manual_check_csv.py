@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 from difflib import SequenceMatcher
-import string
+import ast
 import yaml
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,6 +38,7 @@ with open(CONFIG_FILE, "r") as file:
 STAFF_IDS = config_data["STAFF_IDS"]
 STAFF_YEARS = config_data["STAFF_YEARS"]
 
+COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
 
 def normalize_doi(doi):
     if not doi:
@@ -67,17 +68,36 @@ def save_excel(df, file_name, sort_by=None):
 
 
 def fetch_with_retry(url, max_retries=5):
-    wait = 1  # start with 1 second
-    for attempt in range(max_retries):
-        r = requests.get(url)
-        if r.status_code == 200:
+    wait = 1
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            r = requests.get(url)
+
+            if r.status_code == 429:
+                logging.warning(f"[{attempt}/{max_retries}] rate limit hit. Sleeping {wait}s")
+                time.sleep(wait)
+                wait *= 2  # exponential backoff
+            else:
+                r.raise_for_status()
+            
+            try:
+                _ = r.json()
+            except ValueError:
+                raise ValueError(
+                    f"Invalid JSON (status {r.status_code}): "
+                    f"{r.text[:500]}"
+                )
             return r
-        elif r.status_code == 429:
-            print(f"Rate limit hit. Waiting {wait}s...")
+        except (requests.RequestException, ValueError) as e:
+            logging.warning(f"[{attempt}/{max_retries}] Request failed: {e}")
+            
+            if attempt == max_retries:
+                raise
+            
             time.sleep(wait)
-            wait *= 2  # exponential backoff
-        else:
-            r.raise_for_status()
+            wait *= 2
+        raise RuntimeError("Unreachable")
     raise Exception(f"Failed after {max_retries} retries for {url}")
 
 
@@ -118,23 +138,32 @@ def entry_withing_valid_time(ss_year, staff_start, staff_end):
             return False
     return True
 
-
 def preprocess_bib(df_bib):
     all_dois = set()
     doi_to_row = {}
     ssid_to_row = {}
 
     for _, row in df_bib.iterrows():
-        bib_doi_raw = row.iloc[4]
+        bib_doi_raw = row['doi']
         bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
         if bib_doi:
             all_dois.add(bib_doi)
             doi_to_row[bib_doi] = row
 
-        ss_ids_raw = row.iloc[8]
-        all_ss_ids = [x.strip() for x in (ss_ids_raw or '').replace(',', ' ').split() if x.strip()]
-        for ssid in all_ss_ids:
-            ssid_to_row[ssid] = row
+        ss_ids = row['all_ss_ids'] or []
+        if isinstance(ss_ids, str):
+            try:
+                ss_ids = ast.literal_eval(ss_ids)
+            except (ValueError, SyntaxError):
+                ss_ids = []
+        
+        if isinstance(ss_ids, str):
+            ss_ids = ss_ids.replace(',', ' ').split()
+
+        for ssid in ss_ids:
+            ssid = ssid.strip()
+            if ssid:
+                ssid_to_row[ssid] = row
 
     return all_dois, doi_to_row, ssid_to_row
 
@@ -164,7 +193,9 @@ def find_new_ssids(df_bib):
 
             url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
             r = fetch_with_retry(url)
+
             ss_staff_data = r.json().get('data', [])
+
 
             for entry in ss_staff_data:
                 ss_year = entry.get('year')
@@ -201,45 +232,39 @@ def get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_
         'staff_till': staff_end,
         'ss_year': ss_year,
         'ss_id': entry.get('paperId'),
-        'title': entry.get('title'),
-        'doi': entry['externalIds'].get('DOI'),
+        'ss_title': entry.get('title'),
+        'ss_doi': entry['externalIds'].get('DOI'),
         'ss_citations': entry.get('citationCount'),
-        'pmid': entry['externalIds'].get('PubMed'),
-        'authors': authors,
-        'journal': journal_name,
+        'ss_pmid': entry['externalIds'].get('PubMed'),
+        'ss_authors': authors,
+        'ss_journal': journal_name,
     }           
     return found_item
                 
 def _build_row(row, found_item, ratio, reason):
-    #TODO: replace the iloc
-    return {
-        'bibkey': row.iloc[0], 
-        'ss_id' : found_item['ss_id'], 
-        'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
-        'match_score': ratio, 
-        'bib_doi': row.iloc[4], 
-        'ss_doi': row.iloc[4], 
-        'bib_title': row.iloc[2], 
-        'ss_title': found_item['title'],
-        'staff_id': found_item['staff_id'], 
-        'staff_name': found_item['staff_name'], 
-        'bib_authors': row.iloc[3],
-        'ss_authors': found_item['authors'], 
-        'bib_journal': row.iloc[6], 
-        'ss_journal': found_item['journal'],
-        'bib_year': row.iloc[7], 
-        'ss_year': found_item['ss_year'], 
-        'bib_type': row.iloc[1], 
-        'ss_pmid': found_item['pmid'],
-        'reason': reason, 
-        'actionn': ACTIONS
-    }
+    return (
+        found_item
+        | {
+            'bibkey': row.iloc[0], 
+            'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
+            'match_score': ratio, 
+            'bib_doi': row.iloc[4], 
+            'ss_doi': row.iloc[4], 
+            'bib_title': row.iloc[2], 
+            'bib_authors': row.iloc[3],
+            'bib_journal': row.iloc[6], 
+            'bib_year': row.iloc[7], 
+            'bib_type': row.iloc[1], 
+            'reason': reason, 
+            'actionn': ACTIONS
+        }
+    )
 
 def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
     """Find DOI matches between the bib items and found items."""
     
     ss_id = found_item['ss_id']
-    ss_doi = normalize_doi(found_item['doi'])
+    ss_doi = normalize_doi(found_item['ss_doi'])
 
     # Match by staff ID
     if ss_id in ssid_to_row:
@@ -256,7 +281,7 @@ def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
     if ss_doi and ss_doi in doi_to_row:
         row = doi_to_row[ss_doi]
         bib_iloc2 = row.iloc[2]
-        ss_title = found_item['title']
+        ss_title = found_item['ss_title']
         ratio = SequenceMatcher(a=ss_title, b=bib_iloc2).ratio()
         return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
             
@@ -266,8 +291,8 @@ def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
 def find_title_match_or_new_items(new_items, df_bib):
     """Find title matches or new items between the bib file and found items."""
     
-    titles = new_items['title'].tolist()
-    dois = new_items['doi'].tolist()
+    titles = new_items['ss_title'].tolist()
+    dois = new_items['ss_doi'].tolist()
     ss_ids = new_items['ss_id'].tolist()
     list_title_match = []
     list_no_dois = []
@@ -296,13 +321,13 @@ def find_title_match_or_new_items(new_items, df_bib):
                     new_items[new_items['ss_id'] == ss_id]['staff_id'].item(),
                     new_items[new_items['ss_id'] == ss_id]['staff_name'].item(),
                     match['authors'],
-                    new_items[new_items['ss_id'] == ss_id]['authors'].item(),
+                    new_items[new_items['ss_id'] == ss_id]['ss_authors'].item(),
                     match['journal'],
-                    new_items[new_items['ss_id'] == ss_id]['journal'].item(),
+                    new_items[new_items['ss_id'] == ss_id]['ss_journal'].item(),
                     match['year'],
                     new_items[new_items['ss_id'] == ss_id]['ss_year'].item(),
                     match['type'],
-                    new_items[new_items['ss_id'] == ss_id]['pmid'].item(),
+                    new_items[new_items['ss_id'] == ss_id]['ss_pmid'].item(),
                     'title match', ACTIONS))
         else:
             max_bib_entry = df_bib[title_match_ratios == max_ratio]
@@ -312,12 +337,12 @@ def find_title_match_or_new_items(new_items, df_bib):
             max_bib_year = max_bib_entry['year'].iloc[0]
             type_article = max_bib_entry['type'].iloc[0]
             
-            ss_authors = new_items[new_items['ss_id'] == ss_id]['authors'].item()
+            ss_authors = new_items[new_items['ss_id'] == ss_id]['ss_authors'].item()
             staff_id = new_items[new_items['ss_id'] == ss_id]['staff_id'].item()
             staff_name = new_items[new_items['ss_id'] == ss_id]['staff_name'].item()
-            ss_journal_name = new_items[new_items['ss_id'] == ss_id]['journal'].item()
+            ss_journal_name = new_items[new_items['ss_id'] == ss_id]['ss_journal'].item()
             ss_year = new_items[new_items['ss_id'] == ss_id]['ss_year'].item()
-            ss_pmid = new_items[new_items['ss_id'] == ss_id]['pmid'].item()
+            ss_pmid = new_items[new_items['ss_id'] == ss_id]['ss_pmid'].item()
             
             if doi is None:
                 list_no_dois.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, 
@@ -341,7 +366,7 @@ def main():
     blacklist = pd.read_csv(CONFIG['blacklist_path'])
     normalized_blacklist_dois = set(normalize_doi(str(doi)) for doi in blacklist['doi'].dropna().unique())
     new_items_before_blacklist = len(new_items)
-    new_items = new_items[~new_items['doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
+    new_items = new_items[~new_items['ss_doi'].apply(lambda x: normalize_doi(str(x)) if pd.notna(x) else '').isin(normalized_blacklist_dois)]
     logging.info(f"Removed {new_items_before_blacklist - len(new_items)} blacklisted DOIs")
 
     list_title_match, list_no_dois, list_to_add = find_title_match_or_new_items(new_items, df_bib)
@@ -356,8 +381,7 @@ def main():
     )
     logging.info(f"Total items to write: {len(total_list)}")
 
-    columns = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
-    df=pd.DataFrame(total_list, columns=columns)
+    df=pd.DataFrame(total_list, columns=COLUMNS_EXCEL)
 
     # TODO: Save .csv instead of .xlsx
     df_new_items, removed_items = remove_blacklist_items(df, CONFIG['blacklist_path'])
