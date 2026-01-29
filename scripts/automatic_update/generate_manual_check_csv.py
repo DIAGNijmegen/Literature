@@ -373,11 +373,11 @@ def main():
     
     logging.info(f"Title matches: {len(list_title_match)}, No DOI: {len(list_no_dois)}, To add: {len(list_to_add)}, DOI match: {len(list_doi_match)}, update items {len(update_item)}")
     total_list = (
-        to_list_of_dicts(list_to_add)
-        + to_list_of_dicts(list_no_dois)
-        + to_list_of_dicts(list_title_match)
-        + to_list_of_dicts(list_doi_match)
-        + to_list_of_dicts(update_item)
+        normalize_records(list_to_add)
+        + normalize_records(list_no_dois)
+        + normalize_records(list_title_match)
+        + normalize_records(list_doi_match)
+        + normalize_records(update_item)
     )
     logging.info(f"Total items to write: {len(total_list)}")
 
@@ -389,16 +389,34 @@ def main():
     save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
 
 
-def to_list_of_dicts(x):
-    if isinstance(x, pd.DataFrame):
-        return x.to_dict(orient="records")
-    elif isinstance(x, list):
-        return x
-    elif x is None:
+def normalize_records(records, columns=COLUMNS_EXCEL):
+    """
+    Convert a list of dicts or tuples into a list of dicts
+    with the same columns. Missing values are filled with NA.
+    """
+    if records is None:
         return []
-    else:
-        raise TypeError(f"Unexpected type: {type(x)}")
 
+    if isinstance(records, pd.DataFrame):
+        records = records.to_dict(orient="records")
+
+    normalized = []
+
+    for r in records:
+        if isinstance(r, dict):
+            normalized.append({c: r.get(c, pd.NA) for c in columns})
+
+        elif isinstance(r, (list, tuple)):
+            # assume positional order matches columns
+            normalized.append({
+                c: r[i] if i < len(r) else pd.NA
+                for i, c in enumerate(columns)
+            })
+
+        else:
+            raise TypeError(f"Unsupported record type: {type(r)}")
+
+    return normalized
 
 if __name__ == "__main__":
     main()
