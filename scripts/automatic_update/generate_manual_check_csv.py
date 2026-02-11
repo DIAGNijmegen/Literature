@@ -299,19 +299,22 @@ def normalize_records(records, columns=COLUMNS_EXCEL):
     return normalized
 
 
-def remove_blacklist_items(df_new_items, blacklist_path):
-    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
-    blacklisted_items = pd.read_csv(blacklist_path)
+def remove_blacklist_items(found_items, blacklist_path):
+    """Remove blacklisted items from the final DataFrame"""
+    blacklist_df = pd.read_csv(blacklist_path)
 
-    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
-    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
+    blacklist_ss_ids = set(blacklist_df['ss_id'].dropna().astype(str))
+    blacklist_ss_dois = set(blacklist_df['doi'].dropna().astype(str))
+
+    mask_ss_id = found_items['ss_id'].isin(blacklist_ss_ids)
+    mask_ss_doi = found_items['ss_doi'].isin(blacklist_ss_dois) & found_items['ss_doi'].notna()
 
     combined_mask = mask_ss_id | mask_ss_doi
-    removed_items = df_new_items[combined_mask].copy()
-    df_new_items = df_new_items[~combined_mask].copy()
+    blacklisted_items = found_items[combined_mask].copy()
+    new_items = found_items[~combined_mask].copy()
 
-    logging.info(f"{len(removed_items)} items removed from newly found items.")
-    return df_new_items, removed_items
+    logging.info(f"Removed {len(blacklisted_items)} blacklisted items from newly found items.")
+    return new_items, blacklisted_items
 
 
 def find_title_match_or_new_items(new_items, df_bib):
