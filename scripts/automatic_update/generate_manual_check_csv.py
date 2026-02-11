@@ -191,7 +191,7 @@ def check_doi_match(ss_doi, doi_to_row, found_item):
     return None, None
 
 
-def find_doi_match(all_dois, doi_to_row, ssid_to_bib, found_item):
+def find_match_in_bib(all_dois, doi_to_row, ssid_to_bib, found_item):
     """Find DOI matches between the bib items and found items."""
     
     ss_id = found_item['ss_id']
@@ -257,15 +257,15 @@ def find_new_ssids(df_bib):
                     continue
 
                 found_item = get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year)     
-                category, info = find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item)
+                category, info = find_match_in_bib(all_dois, doi_to_row, ssid_to_row, found_item)
                 
-                if category == 'new_item':
+                if category == 'new_item':  # New items, will later be checked for title matches, missing dois, and doi matches.
                     new_items.append(found_item)
-                elif category == 'update_item':
+                elif category == 'update_item':  # Same ss_id but different doi, maybe a new item that needs to be updated in the bib file? Will be checked manually.
                     update_items.append(info)
-                elif category == 'doi_match':
+                elif category == 'doi_match': # DOI matches, will be checked manually to confirm if they are indeed the same item.
                     doi_matches.append(info)
-                elif category == 'not_new':
+                elif category == 'not_new': # Not new, same ss_id and same doi, no need to check manually.
                     not_new.append(info)
 
     new_items_df = pd.DataFrame(new_items).drop_duplicates(subset=['ss_id'])
