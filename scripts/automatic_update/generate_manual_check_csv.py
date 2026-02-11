@@ -45,28 +45,10 @@ COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', '
 def normalize_doi(doi):
     if not doi:
         return ''
-    # Convert to lowercase
-    doi = doi.lower()
-    # Remove 'https://doi.org/' if present
+    doi = str(doi).lower().strip()
     if doi.startswith("https://doi.org/"):
         doi = doi[len("https://doi.org/"):]
     return doi
-
-
-def return_existing_dois(df_bib):
-    all_dois=[]
-    for idx, row in df_bib.iterrows():
-        if row['doi'] != '':
-            all_dois.append(normalize_doi(row['doi']))
-    return all_dois
-
-
-def save_excel(df, file_name, sort_by=None):
-    """Save DataFrame to an Excel file."""
-    if sort_by:
-        df = df.sort_values(by=sort_by)
-    df.to_excel(file_name, index=False)
-    logging.info(f"Saved DataFrame to {file_name}")
 
 
 def fetch_with_retry(url, max_retries=5):
@@ -75,31 +57,17 @@ def fetch_with_retry(url, max_retries=5):
     for attempt in range(1, max_retries + 1):
         try:
             r = requests.get(url)
-
             if r.status_code == 429:
-                logging.warning(f"[{attempt}/{max_retries}] rate limit hit. Sleeping {wait}s")
                 time.sleep(wait)
-                wait *= 2  # exponential backoff
-            else:
-                r.raise_for_status()
-            
-            try:
-                _ = r.json()
-            except ValueError:
-                raise ValueError(
-                    f"Invalid JSON (status {r.status_code}): "
-                    f"{r.text[:500]}"
-                )
+                wait *= 2
+                continue
+            r.raise_for_status()
             return r
+        
         except (requests.RequestException, ValueError) as e:
             logging.warning(f"[{attempt}/{max_retries}] Request failed: {e}")
-            
             if attempt == max_retries:
                 raise
-            
-            time.sleep(wait)
-            wait *= 2
-        raise RuntimeError("Unreachable")
     raise Exception(f"Failed after {max_retries} retries for {url}")
 
 
@@ -443,6 +411,14 @@ def main():
     df_new_items, removed_items = remove_blacklist_items(df, CONFIG['blacklist_path'])
     save_excel(removed_items, CONFIG['retrieved_items_blacklisted_path'])
     save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
+
+
+def save_excel(df, file_name, sort_by=None):
+    """Save DataFrame to an Excel file."""
+    if sort_by:
+        df = df.sort_values(by=sort_by)
+    df.to_excel(file_name, index=False)
+    logging.info(f"Saved DataFrame to {file_name}")
 
 if __name__ == "__main__":
     main()
