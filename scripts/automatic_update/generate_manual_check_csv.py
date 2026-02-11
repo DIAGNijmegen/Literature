@@ -42,6 +42,8 @@ COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', '
                  'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 
                  'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
 
+BIB_FIELDS = ['title', 'authors', 'doi', 'gscites', 'journal', 'year', 'all_ss_ids', 'pmid']
+
 def normalize_doi(doi):
     if not doi:
         return ''
@@ -71,66 +73,33 @@ def fetch_with_retry(url, max_retries=5):
     raise Exception(f"Failed after {max_retries} retries for {url}")
 
 
-def remove_blacklist_items(df_new_items, blacklist_path):
-    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
-    blacklisted_items = pd.read_csv(blacklist_path)
-
-    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
-    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
-
-    combined_mask = mask_ss_id | mask_ss_doi
-    removed_items = df_new_items[combined_mask].copy()
-    df_new_items = df_new_items[~combined_mask].copy()
-
-    logging.info(f"{len(removed_items)} items removed from newly found items.")
-    return df_new_items, removed_items
-
-
 def from_bib_to_df(diag_bib_raw):
     """Convert bib file to a df."""
-    bib_fields = ['title', 'authors', 'doi', 'gscites', 'journal', 'year', 'all_ss_ids', 'pmid']
 
     bib_data = [
-        [entry.key, entry.type, *(entry.fields.get(f, '').strip('{}') for f in bib_fields)]
+        [entry.key, entry.type, *(entry.fields.get(f, '').strip('{}') for f in BIB_FIELDS)]
         for entry in diag_bib_raw
         if entry.type != 'string'
     ]
 
-    columns = ['bibkey', 'type', *bib_fields]
+    columns = ['bibkey', 'type', *BIB_FIELDS]
     return pd.DataFrame(bib_data, columns=columns)
 
-
-#BIB_FIELDS = {'title', 'author', 'doi', 'gscites','journal', 'year', 'all_ss_ids', 'pmid'}
-
+## TODO: This function saves key + value pairs instead of using a fixed order.
 #def from_bib_to_df(diag_bib_raw):
 #    rows = []
-
 #    for entry in diag_bib_raw:
 #        if entry.type == 'string':
 #            continue
-
 #        row = {
 #            'bibkey': entry.key,
 #            'type': entry.type,
 #        }
-
 #        for k, v in entry.fields.items():
 #            if k in BIB_FIELDS:
 #                row[k] = v
-
 #        rows.append(row)
-
 #    return pd.DataFrame(rows)
-
-
-def entry_withing_valid_time(ss_year, staff_start, staff_end):
-    if ss_year is not None:
-        ss_year = int(ss_year)
-        if ss_year < CONFIG['min_year']:
-            return False
-        if not staff_start <= ss_year <= staff_end: 
-            return False
-    return True
 
 def preprocess_bib(df_bib):
     all_dois = set()
@@ -160,6 +129,28 @@ def preprocess_bib(df_bib):
                 ssid_to_row[ssid] = row
 
     return all_dois, doi_to_row, ssid_to_row
+
+def entry_withing_valid_time(ss_year, staff_start, staff_end):
+    if ss_year is None:
+        return False
+    ss_year = int(ss_year)
+    if ss_year < CONFIG['min_year']:
+        return False
+    return staff_start <= ss_year <= staff_end
+
+def remove_blacklist_items(df_new_items, blacklist_path):
+    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
+    blacklisted_items = pd.read_csv(blacklist_path)
+
+    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
+    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
+
+    combined_mask = mask_ss_id | mask_ss_doi
+    removed_items = df_new_items[combined_mask].copy()
+    df_new_items = df_new_items[~combined_mask].copy()
+
+    logging.info(f"{len(removed_items)} items removed from newly found items.")
+    return df_new_items, removed_items
 
 
 def find_new_ssids(df_bib):
