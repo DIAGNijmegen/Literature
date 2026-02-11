@@ -130,6 +130,7 @@ def preprocess_bib(df_bib):
 
     return all_dois, doi_to_row, ssid_to_row
 
+
 def entry_withing_valid_time(ss_year, staff_start, staff_end):
     if ss_year is None:
         return False
@@ -138,19 +139,87 @@ def entry_withing_valid_time(ss_year, staff_start, staff_end):
         return False
     return staff_start <= ss_year <= staff_end
 
-def remove_blacklist_items(df_new_items, blacklist_path):
-    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
-    blacklisted_items = pd.read_csv(blacklist_path)
 
-    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
-    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
+def get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year):
+    authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
+    journal = entry.get('journal', None)
+    journal_name = journal.get('name') if journal else None
 
-    combined_mask = mask_ss_id | mask_ss_doi
-    removed_items = df_new_items[combined_mask].copy()
-    df_new_items = df_new_items[~combined_mask].copy()
+    found_item = {
+        'staff_id': staff_id,
+        'staff_name': staff_name,
+        'staff_from': staff_start,
+        'staff_till': staff_end,
+        'ss_year': ss_year,
+        'ss_id': entry.get('paperId'),
+        'ss_title': entry.get('title'),
+        'ss_doi': entry['externalIds'].get('DOI'),
+        'ss_citations': entry.get('citationCount'),
+        'ss_pmid': entry['externalIds'].get('PubMed'),
+        'ss_authors': authors,
+        'ss_journal': journal_name,
+    }           
+    return found_item
 
-    logging.info(f"{len(removed_items)} items removed from newly found items.")
-    return df_new_items, removed_items
+
+def _build_row(row, found_item, ratio, reason):
+    return (
+        found_item
+        | {
+            'bibkey': row.iloc[0], 
+            'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
+            'match_score': ratio, 
+            'bib_doi': row.iloc[4], 
+            'ss_doi': row.iloc[4], 
+            'bib_title': row.iloc[2], 
+            'bib_authors': row.iloc[3],
+            'bib_journal': row.iloc[6], 
+            'bib_year': row.iloc[7], 
+            'bib_type': row.iloc[1], 
+            'reason': reason, 
+            'actionn': ACTIONS
+        }
+    )
+
+def check_doi_match(ss_doi, doi_to_row, found_item):
+    if ss_doi and ss_doi in doi_to_row:
+        row = doi_to_row[ss_doi]
+        bib_title = row['title']
+        ss_title = found_item['ss_title']
+        ratio = SequenceMatcher(a=ss_title, b=bib_title).ratio()
+        return row, ratio
+    return None, None
+
+
+def find_doi_match(all_dois, doi_to_row, ssid_to_bib, found_item):
+    """Find DOI matches between the bib items and found items."""
+    
+    ss_id = found_item['ss_id']
+    ss_doi = normalize_doi(found_item['ss_doi'])
+
+    # If the found item has a matching ss_id in the bib file
+    if ss_id in ssid_to_bib: 
+        row = ssid_to_bib[ss_id]
+        bib_doi = normalize_doi(row['doi'])
+
+        if ss_doi == bib_doi:
+            return 'not_new', ss_id
+        
+        else: #same ss_id, different doi, maybe new item?
+            if ss_doi in all_dois: # could be that the doi matches another bib item? => TODO: find that item, and return it as match
+                row, ratio = check_doi_match(ss_doi, doi_to_row, found_item)
+                if row is not None:
+                    return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
+            
+            if (bib_doi == '' or 'arxiv' in bib_doi): #TODO: Why add this if ss_doi does not exist?
+                return 'update_item', _build_row(row, found_item, 1, 'update_item')
+    
+    if ss_doi in all_dois:
+        row, ratio = check_doi_match(ss_doi, doi_to_row, found_item)
+        if row is not None:
+            return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
+        
+    return 'new_item', None
 
 
 def find_new_ssids(df_bib):
@@ -205,72 +274,44 @@ def find_new_ssids(df_bib):
 
     return new_items_df, doi_matches_df, update_items_df
 
-def get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year):
-    authors = ' and '.join([author['name'] for author in entry.get('authors', [])])
-    journal = entry.get('journal', None)
-    journal_name = journal.get('name') if journal else None
 
-    found_item = {
-        'staff_id': staff_id,
-        'staff_name': staff_name,
-        'staff_from': staff_start,
-        'staff_till': staff_end,
-        'ss_year': ss_year,
-        'ss_id': entry.get('paperId'),
-        'ss_title': entry.get('title'),
-        'ss_doi': entry['externalIds'].get('DOI'),
-        'ss_citations': entry.get('citationCount'),
-        'ss_pmid': entry['externalIds'].get('PubMed'),
-        'ss_authors': authors,
-        'ss_journal': journal_name,
-    }           
-    return found_item
-                
-def _build_row(row, found_item, ratio, reason):
-    return (
-        found_item
-        | {
-            'bibkey': row.iloc[0], 
-            'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
-            'match_score': ratio, 
-            'bib_doi': row.iloc[4], 
-            'ss_doi': row.iloc[4], 
-            'bib_title': row.iloc[2], 
-            'bib_authors': row.iloc[3],
-            'bib_journal': row.iloc[6], 
-            'bib_year': row.iloc[7], 
-            'bib_type': row.iloc[1], 
-            'reason': reason, 
-            'actionn': ACTIONS
-        }
-    )
-
-def find_doi_match(all_dois, doi_to_row, ssid_to_row, found_item):
-    """Find DOI matches between the bib items and found items."""
-    
-    ss_id = found_item['ss_id']
-    ss_doi = normalize_doi(found_item['ss_doi'])
-
-    # Match by staff ID
-    if ss_id in ssid_to_row:
-        row = ssid_to_row[ss_id]
-        bib_doi_raw = row.iloc[4]
-        bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
-
-        if ss_doi != bib_doi and ss_doi not in all_dois and (bib_doi == '' or 'arxiv' in bib_doi):
-            return 'update_item', _build_row(row, found_item, 1, 'update_item')
+def normalize_records(records, columns=COLUMNS_EXCEL):
+    """
+    Convert a list of dicts or tuples into a list of dicts
+    with the same columns. Missing values are filled with NA.
+    """
+    if records is None:
+        return []
+    if isinstance(records, pd.DataFrame):
+        records = records.to_dict(orient="records")
+    normalized = []
+    for r in records:
+        if isinstance(r, dict):
+            normalized.append({c: r.get(c, pd.NA) for c in columns})
+        elif isinstance(r, (list, tuple)):
+            # assume positional order matches columns
+            normalized.append({
+                c: r[i] if i < len(r) else pd.NA
+                for i, c in enumerate(columns)
+            })
         else:
-            return 'not_new', ss_id
-    
-    # Match by DOI
-    if ss_doi and ss_doi in doi_to_row:
-        row = doi_to_row[ss_doi]
-        bib_iloc2 = row.iloc[2]
-        ss_title = found_item['ss_title']
-        ratio = SequenceMatcher(a=ss_title, b=bib_iloc2).ratio()
-        return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
-            
-    return 'new_item', None
+            raise TypeError(f"Unsupported record type: {type(r)}")
+    return normalized
+
+
+def remove_blacklist_items(df_new_items, blacklist_path):
+    """Remove blacklisted items from the final DataFrame and save removed items to a CSV."""
+    blacklisted_items = pd.read_csv(blacklist_path)
+
+    mask_ss_id = df_new_items['ss_id'].isin(blacklisted_items['ss_id'].unique())
+    mask_ss_doi = df_new_items['ss_doi'].isin(blacklisted_items['doi'].unique()) & df_new_items['ss_doi'].notna()
+
+    combined_mask = mask_ss_id | mask_ss_doi
+    removed_items = df_new_items[combined_mask].copy()
+    df_new_items = df_new_items[~combined_mask].copy()
+
+    logging.info(f"{len(removed_items)} items removed from newly found items.")
+    return df_new_items, removed_items
 
 
 def find_title_match_or_new_items(new_items, df_bib):
@@ -336,36 +377,6 @@ def find_title_match_or_new_items(new_items, df_bib):
                 list_to_add.append((max_bibkey, ss_id, f'https://www.semanticscholar.org/paper/{ss_id}', max_ratio, bib_doi, doi, max_bib_title, ss_title, staff_id, 
                                     staff_name, authors, ss_authors, max_bib_journal, ss_journal_name, max_bib_year, ss_year, type_article, ss_pmid, 'new item', ACTIONS))
     return list_title_match, list_no_dois, list_to_add
-
-
-def normalize_records(records, columns=COLUMNS_EXCEL):
-    """
-    Convert a list of dicts or tuples into a list of dicts
-    with the same columns. Missing values are filled with NA.
-    """
-    if records is None:
-        return []
-
-    if isinstance(records, pd.DataFrame):
-        records = records.to_dict(orient="records")
-
-    normalized = []
-
-    for r in records:
-        if isinstance(r, dict):
-            normalized.append({c: r.get(c, pd.NA) for c in columns})
-
-        elif isinstance(r, (list, tuple)):
-            # assume positional order matches columns
-            normalized.append({
-                c: r[i] if i < len(r) else pd.NA
-                for i, c in enumerate(columns)
-            })
-
-        else:
-            raise TypeError(f"Unsupported record type: {type(r)}")
-
-    return normalized
 
 
 def main():
