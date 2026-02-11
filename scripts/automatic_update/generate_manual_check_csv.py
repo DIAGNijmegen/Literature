@@ -38,7 +38,9 @@ with open(CONFIG_FILE, "r") as file:
 STAFF_IDS = config_data["STAFF_IDS"]
 STAFF_YEARS = config_data["STAFF_YEARS"]
 
-COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
+COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', 'bib_title', 'ss_title', 
+                 'staff_id', 'staff_name', 'bib_authors', 'ss_authors', 'bib_journal', 'ss_journal', 
+                 'bib_year', 'ss_year', 'bib_type', 'ss_pmid', 'reason', 'action']
 
 def normalize_doi(doi):
     if not doi:
@@ -128,6 +130,30 @@ def from_bib_to_df(diag_bib_raw):
 
     columns = ['bibkey', 'type', *bib_fields]
     return pd.DataFrame(bib_data, columns=columns)
+
+
+#BIB_FIELDS = {'title', 'author', 'doi', 'gscites','journal', 'year', 'all_ss_ids', 'pmid'}
+
+#def from_bib_to_df(diag_bib_raw):
+#    rows = []
+
+#    for entry in diag_bib_raw:
+#        if entry.type == 'string':
+#            continue
+
+#        row = {
+#            'bibkey': entry.key,
+#            'type': entry.type,
+#        }
+
+#        for k, v in entry.fields.items():
+#            if k in BIB_FIELDS:
+#                row[k] = v
+
+#        rows.append(row)
+
+#    return pd.DataFrame(rows)
+
 
 def entry_withing_valid_time(ss_year, staff_start, staff_end):
     if ss_year is not None:
@@ -353,6 +379,36 @@ def find_title_match_or_new_items(new_items, df_bib):
     return list_title_match, list_no_dois, list_to_add
 
 
+def normalize_records(records, columns=COLUMNS_EXCEL):
+    """
+    Convert a list of dicts or tuples into a list of dicts
+    with the same columns. Missing values are filled with NA.
+    """
+    if records is None:
+        return []
+
+    if isinstance(records, pd.DataFrame):
+        records = records.to_dict(orient="records")
+
+    normalized = []
+
+    for r in records:
+        if isinstance(r, dict):
+            normalized.append({c: r.get(c, pd.NA) for c in columns})
+
+        elif isinstance(r, (list, tuple)):
+            # assume positional order matches columns
+            normalized.append({
+                c: r[i] if i < len(r) else pd.NA
+                for i, c in enumerate(columns)
+            })
+
+        else:
+            raise TypeError(f"Unsupported record type: {type(r)}")
+
+    return normalized
+
+
 def main():
     diag_bib_raw = read_bibfile(None, CONFIG['bib_path'])
     logging.info(f"Bib file read: {len(diag_bib_raw)} entries")
@@ -387,36 +443,6 @@ def main():
     df_new_items, removed_items = remove_blacklist_items(df, CONFIG['blacklist_path'])
     save_excel(removed_items, CONFIG['retrieved_items_blacklisted_path'])
     save_excel(df_new_items, CONFIG['manual_check_path'], sort_by=['ss_id'])
-
-
-def normalize_records(records, columns=COLUMNS_EXCEL):
-    """
-    Convert a list of dicts or tuples into a list of dicts
-    with the same columns. Missing values are filled with NA.
-    """
-    if records is None:
-        return []
-
-    if isinstance(records, pd.DataFrame):
-        records = records.to_dict(orient="records")
-
-    normalized = []
-
-    for r in records:
-        if isinstance(r, dict):
-            normalized.append({c: r.get(c, pd.NA) for c in columns})
-
-        elif isinstance(r, (list, tuple)):
-            # assume positional order matches columns
-            normalized.append({
-                c: r[i] if i < len(r) else pd.NA
-                for i, c in enumerate(columns)
-            })
-
-        else:
-            raise TypeError(f"Unsupported record type: {type(r)}")
-
-    return normalized
 
 if __name__ == "__main__":
     main()
