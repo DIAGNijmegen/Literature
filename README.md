@@ -7,28 +7,27 @@
         ┌───────────────────┐
         │ In bib by ss_id?  │
         └───────┬───────────┘
-        Yes     │        No
-        ↓       │         ↓
-  DOI same?     │   DOI in bib?
-   ↓            │     ↓
- Yes → IGNORE   │   Yes → DOI_MATCH
- No             │   No  → NEW_ITEM
- ↓              │
-Check DOI in    │
- DIAG.bib       │
- ↓              │
-Match → DOI_MATCH
-No match
-  ↓  
-Bib DOI empty or 'arxiv' → UPDATE_ITEM
-Not empty/ arxiv
-  ↓  
-Check SS DOI in diag.bib
- ↓              
-Match → DOI_MATCH
-else → NEW_ITEM
-
-
+                │
+     No         │   Yes
+      ↓         │    ↓
+DOI in bib?     │ DOI same? 
+   ↓            │   ↓
+Yes → DOI_MATCH │ Yes → IGNORE 
+No  → NEW_ITEM  │ No 
+                │ ↓   
+                │ Check DOI in    
+                │ DIAG.bib       
+                │ ↓              
+                │ Match → DOI_MATCH
+                │ No match
+                │ ↓  
+                │ Bib DOI empty or 'arxiv' → UPDATE_ITEM
+                │ Not empty/ arxiv
+                │ ↓  
+                │ Check SS DOI in diag.bib
+                │ ↓              
+                │ Match → DOI_MATCH
+                │ else → NEW_ITEM
 
     ┌────────────────────────────┐
     │ NEW ITEMS SEMANTIC SCHOLAR │
