@@ -1,5 +1,5 @@
 # Literature created or cited at DIAG
-
+```
     ┌────────────────────────────┐
     │ Semantic Scholar Items     │
     └───────────┬────────────────┘
@@ -10,25 +10,26 @@
                 │
      No         │   Yes
       ↓         │    ↓
-DOI in bib?     │ DOI same? 
+DOI in bib?     │   DOI same? 
    ↓            │   ↓
-Yes → DOI_MATCH │ Yes → IGNORE 
-No  → NEW_ITEM  │ No 
-                │ ↓   
-                │ Check DOI in    
-                │ DIAG.bib       
-                │ ↓              
-                │ Match → DOI_MATCH
-                │ No match
-                │ ↓  
-                │ Bib DOI empty or 'arxiv' → UPDATE_ITEM
-                │ Not empty/ arxiv
-                │ ↓  
-                │ Check SS DOI in diag.bib
-                │ ↓              
-                │ Match → DOI_MATCH
-                │ else → NEW_ITEM
-
+Yes → DOI_MATCH │   Yes → IGNORE 
+No  → NEW_ITEM  │   No 
+                │   ↓   
+                │   Check DOI in    
+                │   DIAG.bib       
+                │   ↓              
+                │   Match → DOI_MATCH
+                │   No match
+                │   ↓  
+                │   Bib DOI empty or 'arxiv' → UPDATE_ITEM
+                │   Not empty/ arxiv
+                │   ↓  
+                │   Check SS DOI in diag.bib
+                │   ↓              
+                │   Match → DOI_MATCH
+                │   else → NEW_ITEM
+```
+```
     ┌────────────────────────────┐
     │ NEW ITEMS SEMANTIC SCHOLAR │
     └───────────┬────────────────┘
@@ -42,7 +43,7 @@ No  → NEW_ITEM  │ No
                 │     ↓
                 │   Yes → DOI_NONE
                 │   No  → NEW_ITEM
-
+```
 
 [add ss_id, blacklist ss_id, add new item, add manually, update_item, None]
 doi match,  doi none, new item, title match, update item 3
