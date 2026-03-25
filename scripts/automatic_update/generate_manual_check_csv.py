@@ -53,7 +53,9 @@ def normalize_doi(doi):
     return doi
 
 
-def fetch_with_retry(url, max_retries=5):
+def fetch_with_retry(staff_id, max_retries=5):
+    url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
+
     wait = 1
 
     for attempt in range(1, max_retries + 1):
@@ -102,7 +104,7 @@ def from_bib_to_df(diag_bib_raw):
 #    return pd.DataFrame(rows)
 
 def preprocess_bib(df_bib):
-    all_dois = set()
+    known_dois = set()
     doi_to_row = {}
     ssid_to_row = {}
 
@@ -110,7 +112,7 @@ def preprocess_bib(df_bib):
         bib_doi_raw = row['doi']
         bib_doi = normalize_doi(bib_doi_raw) if bib_doi_raw else ''
         if bib_doi:
-            all_dois.add(bib_doi)
+            known_dois.add(bib_doi)
             doi_to_row[bib_doi] = row
 
         ss_ids = row['all_ss_ids'] or []
@@ -128,7 +130,7 @@ def preprocess_bib(df_bib):
             if ssid:
                 ssid_to_row[ssid] = row
 
-    return all_dois, doi_to_row, ssid_to_row
+    return known_dois, doi_to_row, ssid_to_row
 
 
 def entry_withing_valid_time(ss_year, staff_start, staff_end):
@@ -191,7 +193,7 @@ def check_doi_match(ss_doi, doi_to_row, found_item):
     return None, None
 
 
-def find_match_in_bib(all_dois, doi_to_row, ssid_to_bib, found_item):
+def find_match_in_bib(known_dois, doi_to_row, ssid_to_bib, found_item):
     """Find DOI matches between the bib items and found items."""
     
     ss_id = found_item['ss_id']
@@ -206,7 +208,7 @@ def find_match_in_bib(all_dois, doi_to_row, ssid_to_bib, found_item):
             return 'not_new', ss_id
         
         else: #same ss_id, different doi, maybe new item?
-            if ss_doi in all_dois: # could be that the doi matches another bib item? => TODO: find that item, and return it as match
+            if ss_doi in known_dois: # could be that the doi matches another bib item? => TODO: find that item, and return it as match
                 row, ratio = check_doi_match(ss_doi, doi_to_row, found_item)
                 if row is not None:
                     return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
@@ -214,7 +216,7 @@ def find_match_in_bib(all_dois, doi_to_row, ssid_to_bib, found_item):
             if (bib_doi == '' or 'arxiv' in bib_doi): #TODO: Why add this if ss_doi does not exist?
                 return 'update_item', _build_row(row, found_item, 1, 'update_item')
     
-    if ss_doi in all_dois:
+    if ss_doi in known_dois:
         row, ratio = check_doi_match(ss_doi, doi_to_row, found_item)
         if row is not None:
             return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
@@ -222,18 +224,17 @@ def find_match_in_bib(all_dois, doi_to_row, ssid_to_bib, found_item):
     return 'new_item', None
 
 
-def find_new_ssids(df_bib):
+def collect_semantic_scholar_items(df_bib):
     """ Find new items from Semantic Scholar, based on staff IDs and years. Returns a DataFrame with all paper info for staff members. """
     new_items = []
-    doi_matches = []
-    update_items = []
+    doi_conflicts = []
+    ss_id_conflicts = []
     not_new = []
 
-    all_dois, doi_to_row, ssid_to_row = preprocess_bib(df_bib)
+    known_dois, doi_index, ssid_index = preprocess_bib(df_bib)
 
     for staff_name, staff_ids in STAFF_IDS.items():
         print('Processing staff member:', staff_name)
-
         staff_years = STAFF_YEARS.get(staff_name)
         if not staff_years:
             logging.warning(f"No year information found for staff member: {staff_name}. Skipping.")
@@ -244,12 +245,8 @@ def find_new_ssids(df_bib):
 
         for staff_id in staff_ids:
             print('\t\t', staff_id)
-
-            url = (f'https://api.semanticscholar.org/graph/v1/author/{staff_id}/papers?fields=year,title,authors,externalIds,citationCount,publicationTypes,journal&limit=500')
-            r = fetch_with_retry(url)
-
+            r = fetch_with_retry(staff_id)
             ss_staff_data = r.json().get('data', [])
-
 
             for entry in ss_staff_data:
                 ss_year = entry.get('year')
@@ -257,22 +254,22 @@ def find_new_ssids(df_bib):
                     continue
 
                 found_item = get_found_item_dict(entry, staff_id, staff_name, staff_start, staff_end, ss_year)     
-                category, info = find_match_in_bib(all_dois, doi_to_row, ssid_to_row, found_item)
+                category, info = find_match_in_bib(known_dois, doi_index, ssid_index, found_item)
                 
                 if category == 'new_item':  # New items, will later be checked for title matches, missing dois, and doi matches.
                     new_items.append(found_item)
                 elif category == 'update_item':  # Same ss_id but different doi, maybe a new item that needs to be updated in the bib file? Will be checked manually.
-                    update_items.append(info)
+                    ss_id_conflicts.append(info)
                 elif category == 'doi_match': # DOI matches, will be checked manually to confirm if they are indeed the same item.
-                    doi_matches.append(info)
+                    doi_conflicts.append(info)
                 elif category == 'not_new': # Not new, same ss_id and same doi, no need to check manually.
                     not_new.append(info)
 
     new_items_df = pd.DataFrame(new_items).drop_duplicates(subset=['ss_id'])
-    doi_matches_df = pd.DataFrame(doi_matches).drop_duplicates(subset=['ss_id'])
-    update_items_df = pd.DataFrame(update_items).drop_duplicates(subset=['ss_id'])
+    doi_conflicts_df = pd.DataFrame(doi_conflicts).drop_duplicates(subset=['ss_id'])
+    ss_id_conflicts_df = pd.DataFrame(ss_id_conflicts).drop_duplicates(subset=['ss_id'])
 
-    return new_items_df, doi_matches_df, update_items_df
+    return new_items_df, doi_conflicts_df, ss_id_conflicts_df
 
 
 def normalize_records(records, columns=COLUMNS_EXCEL):
@@ -389,7 +386,7 @@ def main():
     df_bib = from_bib_to_df(diag_bib_raw)
     logging.info(f"Converted to DataFrame: {len(df_bib)} rows")
 
-    new_items, list_doi_match, update_item = find_new_ssids(df_bib)
+    new_items, list_doi_match, update_item = collect_semantic_scholar_items(df_bib)
     logging.info(f"New items: {len(new_items)}, DOI matches: {len(list_doi_match)}, Updates: {len(update_item)}")
 
     blacklist = pd.read_csv(CONFIG['blacklist_path'])
