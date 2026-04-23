@@ -44,6 +44,7 @@ COLUMNS_EXCEL = ['bibkey', 'ss_id', 'url', 'match score', 'bib_doi', 'ss_doi', '
 
 BIB_FIELDS = ['title', 'authors', 'doi', 'gscites', 'journal', 'year', 'all_ss_ids', 'pmid']
 
+
 def normalize_doi(doi):
     if not doi:
         return ''
