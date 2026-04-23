@@ -179,7 +179,7 @@ def _build_row(row, found_item, ratio, reason):
             'bib_year': row.iloc[7], 
             'bib_type': row.iloc[1], 
             'reason': reason, 
-            'actionn': ACTIONS
+            'action': ACTIONS
         }
     )
 
@@ -213,7 +213,7 @@ def find_match_in_bib(known_dois, doi_to_row, ssid_to_bib, found_item):
                 if row is not None:
                     return 'doi_match', _build_row(row, found_item, ratio, 'doi_match')
             
-            if (bib_doi == '' or 'arxiv' in bib_doi): #TODO: Why add this if ss_doi does not exist?
+            if (bib_doi == '' or 'arxiv' in bib_doi.lower()): #TODO: Why add this if ss_doi does not exist?
                 return 'update_item', _build_row(row, found_item, 1, 'update_item')
     
     if ss_doi in known_dois:
