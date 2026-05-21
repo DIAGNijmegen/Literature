@@ -3,16 +3,16 @@ import os
 import string
 import sys
 import re
-current_script_directory = os.path.dirname(os.path.realpath(__file__))
-project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
-sys.path.append(os.path.join(project_root))
+import numpy as np
 from get_biblatex import GetBiblatex
 from bib_handling_code.processbib import read_bibfile, parse_bibtex_string
 from bib_handling_code.processbib import save_to_file
 from ast import literal_eval
-from collections import defaultdict
 from semanticscholar import SemanticScholar, SemanticScholarException
 
+current_script_directory = os.path.dirname(os.path.realpath(__file__))
+project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
+sys.path.append(os.path.join(project_root))
 
 def from_bib_to_csv(diag_bib_raw):
     """Convert bib file to a csv."""
@@ -269,7 +269,7 @@ def loop_manual_check(manually_checked, diag_bib_orig):
     
     
     for index, bib_item in manually_checked.iterrows():
-        print(f"Working on {index}/{len(manually_checked)}: {bib_item['ss_doi']} (action is {bib_item['action']})")
+        print(f"Working on {index+1}/{len(manually_checked)}: {bib_item['ss_doi']} (action is {bib_item['action']})")
         # Make sure item is manually checked
         if "," in bib_item['action']:
             print(f"{bib_item['ss_id']} has not been checked yet, make sure only 1 action is mentioned")
@@ -320,19 +320,18 @@ def loop_manual_check(manually_checked, diag_bib_orig):
 
 
 def main():
+
     # load manually_checked
     directory = os.path.join(project_root, 'script_data')
     filename = get_latest_manual_check_file(directory)
     manually_checked = pd.read_excel(os.path.join(directory, filename))
+
     print("Filename: ", filename)
     manually_checked['ss_pmid'] = manually_checked['ss_pmid'].fillna('-1')
     manually_checked['ss_pmid'] = manually_checked['ss_pmid'].astype(int).astype(str)
     manually_checked['ss_pmid'] = manually_checked['ss_pmid'].replace('-1', '')
-    
     manually_checked['ss_doi'] = manually_checked['ss_doi'].fillna('')
     
-    
-
     # load bib file just for reading at this point
     diag_bib_path = os.path.join('diag.bib')
 
@@ -340,7 +339,6 @@ def main():
     remove_items = manually_checked[manually_checked['action']=='[update item]']['bibkey'].tolist()
     diag_bib_raw = [entry for entry in diag_bib_raw if entry.key not in remove_items]
     save_to_file(diag_bib_raw, None, 'diag.bib')
-
 
     blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid = loop_manual_check(manually_checked, diag_bib_raw)
 
@@ -369,42 +367,56 @@ def main():
     update_blacklist_csv(blacklist_df, blacklist_items, blacklist_path)
 
     # Here we provide a report of rows where we did not know what to do or we failed to do the action
-    print("DONE with processing manually checked items")
-    print('Failures are as follows:')
-    for item in failed_new_items:
-        print('Failed to add new bib entry ', item['ss_id'])
-    for item in failed_updated_items:
-        print('Failed to update exiting bib entry with new ss_id', item['bibkey'], item['ss_id'])
-    for item in failed_to_find_actions:
-        print('Failed to find valid action for item', item['ss_id'], item['action'])
-    for item in ss_ids_not_found_for_citations:
-        print('Failed to find this ss_id to update citations', item)
+    print("\n" + "=" * 80)
+    print("DONE PROCESSING MANUALLY CHECKED ITEMS")
+    print("=" * 80)
 
-    print(f"Blacklisted items: {len(blacklist_items)}")
-    print(f"Updated items: {len(items_to_update)}")
-    print(f"Newly added items: {items_to_add.count('{yes}')}")
-    import numpy as np
+    new_items_count = items_to_add.count('{yes}')
     count_action_none = np.sum(np.fromiter(('none' in str(action).lower() for action in manually_checked['action']), dtype=bool))
-    print(f"Items with action None: {count_action_none}")
-    
-    
-    print(f"total processed items: {len(blacklist_items) + len(items_to_update) + items_to_add.count('{yes}') + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none}")
-    print(f"amount of items in manual checkfile: {manually_checked.shape[0]}")
+    total_processed = (len(blacklist_items) + len(items_to_update) + new_items_count + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none)
+
+    print("\nSUMMARY")
+    print("-" * 80)
+    print(f"{'Blacklisted items:':35} {len(blacklist_items)}")
+    print(f"{'Updated existing items:':35} {len(items_to_update)}")
+    print(f"{'Newly added items:':35} {new_items_count}")
+    print(f"{'Items with action None:':35} {count_action_none}")
+    print(f"{'Total processed items:':35} {total_processed}")
+    print(f"{'Rows in manual check file:':35} {manually_checked.shape[0]}")
+
+
+    total_failures = len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + len(ss_ids_not_found_for_citations)
+    if total_failures == 0:
+        print("\nNo failures encountered.")
+
+    else:
+        print("\nFAILURES")
+        print("-" * 80)
+
+        if failed_new_items:
+            print(f"{'Failed to add new bib entries:':35} {len(failed_new_items)}")
+            for item in failed_new_items:
+                print(f"  - SS ID: {item['ss_id']}, DOI: {item['ss_doi']}")
+
+        if failed_updated_items:
+            print(f"\nFailed to update {len(failed_updated_items)} existing entries:")
+            for item in failed_updated_items:
+                print(f"  - bibkey={item['bibkey']} | ss_id={item['ss_id']}")
+
+        if failed_to_find_actions:
+            print(f"\nFailed to interpret {len(failed_to_find_actions)} actions:")
+            for item in failed_to_find_actions:
+                print(f"  - ss_id={item['ss_id']} | action={item['action']}")
+
+        if ss_ids_not_found_for_citations:
+            print(f"\nSemantic Scholar IDs not found ({len(ss_ids_not_found_for_citations)}):")
+            for ss_id in ss_ids_not_found_for_citations:
+                print(f"  - {ss_id}")
+                
+        print("\n" + "=" * 80)
 
     save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
 
 
 if __name__ == "__main__":
     main()
-
-    
-
-    
-
-    
-    
-
-
-
-
-
