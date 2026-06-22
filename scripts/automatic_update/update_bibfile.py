@@ -319,8 +319,57 @@ def loop_manual_check(manually_checked, diag_bib_orig):
     return blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid
 
 
-def main():
+def reporting(items_to_add, blacklist_items, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, ss_ids_not_found_for_citations, manually_checked):
+    # Here we provide a report of rows where we did not know what to do or we failed to do the action
+    print("\n" + "=" * 80)
+    print("DONE PROCESSING MANUALLY CHECKED ITEMS")
+    print("=" * 80)
 
+    new_items_count = items_to_add.count('{yes}')
+    count_action_none = np.sum(np.fromiter(('none' in str(action).lower() for action in manually_checked['action']), dtype=bool))
+    total_processed = (len(blacklist_items) + len(items_to_update) + new_items_count + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none)
+
+    print("\nSUMMARY")
+    print("-" * 80)
+    print(f"{'Blacklisted items:':35} {len(blacklist_items)}")
+    print(f"{'Updated existing items:':35} {len(items_to_update)}")
+    print(f"{'Newly added items:':35} {new_items_count}")
+    print(f"{'Items with action None:':35} {count_action_none}")
+    print(f"{'Total processed items:':35} {total_processed}")
+    print(f"{'Rows in manual check file:':35} {manually_checked.shape[0]}")
+
+    total_failures = len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + len(ss_ids_not_found_for_citations)
+    if total_failures == 0:
+        print("\nNo failures encountered.")
+
+    else:
+        print("\nFAILURES")
+        print("-" * 80)
+
+        if failed_new_items:
+            print(f"{'Failed to add new bib entries:':35} {len(failed_new_items)}")
+            for item in failed_new_items:
+                print(f"  - SS ID: {item['ss_id']}, DOI: {item['ss_doi']}")
+
+        if failed_updated_items:
+            print(f"\nFailed to update {len(failed_updated_items)} existing entries:")
+            for item in failed_updated_items:
+                print(f"  - bibkey={item['bibkey']} | ss_id={item['ss_id']}")
+
+        if failed_to_find_actions:
+            print(f"\nFailed to interpret {len(failed_to_find_actions)} actions:")
+            for item in failed_to_find_actions:
+                print(f"  - ss_id={item['ss_id']} | action={item['action']}")
+
+        if ss_ids_not_found_for_citations:
+            print(f"\nSemantic Scholar IDs not found ({len(ss_ids_not_found_for_citations)}):")
+            for ss_id in ss_ids_not_found_for_citations:
+                print(f"  - {ss_id}")
+                
+        print("\n" + "=" * 80)
+
+
+def main():
     # load manually_checked
     directory = os.path.join(project_root, 'script_data')
     filename = get_latest_manual_check_file(directory)
@@ -366,55 +415,8 @@ def main():
     blacklist_df = pd.read_csv(blacklist_path)
     update_blacklist_csv(blacklist_df, blacklist_items, blacklist_path)
 
-    # Here we provide a report of rows where we did not know what to do or we failed to do the action
-    print("\n" + "=" * 80)
-    print("DONE PROCESSING MANUALLY CHECKED ITEMS")
-    print("=" * 80)
-
-    new_items_count = items_to_add.count('{yes}')
-    count_action_none = np.sum(np.fromiter(('none' in str(action).lower() for action in manually_checked['action']), dtype=bool))
-    total_processed = (len(blacklist_items) + len(items_to_update) + new_items_count + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none)
-
-    print("\nSUMMARY")
-    print("-" * 80)
-    print(f"{'Blacklisted items:':35} {len(blacklist_items)}")
-    print(f"{'Updated existing items:':35} {len(items_to_update)}")
-    print(f"{'Newly added items:':35} {new_items_count}")
-    print(f"{'Items with action None:':35} {count_action_none}")
-    print(f"{'Total processed items:':35} {total_processed}")
-    print(f"{'Rows in manual check file:':35} {manually_checked.shape[0]}")
-
-
-    total_failures = len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + len(ss_ids_not_found_for_citations)
-    if total_failures == 0:
-        print("\nNo failures encountered.")
-
-    else:
-        print("\nFAILURES")
-        print("-" * 80)
-
-        if failed_new_items:
-            print(f"{'Failed to add new bib entries:':35} {len(failed_new_items)}")
-            for item in failed_new_items:
-                print(f"  - SS ID: {item['ss_id']}, DOI: {item['ss_doi']}")
-
-        if failed_updated_items:
-            print(f"\nFailed to update {len(failed_updated_items)} existing entries:")
-            for item in failed_updated_items:
-                print(f"  - bibkey={item['bibkey']} | ss_id={item['ss_id']}")
-
-        if failed_to_find_actions:
-            print(f"\nFailed to interpret {len(failed_to_find_actions)} actions:")
-            for item in failed_to_find_actions:
-                print(f"  - ss_id={item['ss_id']} | action={item['action']}")
-
-        if ss_ids_not_found_for_citations:
-            print(f"\nSemantic Scholar IDs not found ({len(ss_ids_not_found_for_citations)}):")
-            for ss_id in ss_ids_not_found_for_citations:
-                print(f"  - {ss_id}")
-                
-        print("\n" + "=" * 80)
-
+    reporting(items_to_add, blacklist_items, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, ss_ids_not_found_for_citations, manually_checked)
+    
     save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
 
 

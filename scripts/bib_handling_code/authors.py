@@ -10,6 +10,8 @@ This file contains author specific functions which are needed when parsing the b
 """
 
 
+# TODO: Refactor get_list_researchers to separate file reading and data processing logic to make the function easier to maintain
+
 # authors
 def get_list_researchers(members_path):
     """
