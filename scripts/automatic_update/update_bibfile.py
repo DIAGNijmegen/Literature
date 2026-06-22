@@ -6,6 +6,7 @@ import string
 import sys
 import re
 import numpy as np
+from pathlib import Path
 from get_biblatex import GetBiblatex
 from bib_handling_code.processbib import read_bibfile, parse_bibtex_string
 from bib_handling_code.processbib import save_to_file
@@ -13,8 +14,8 @@ from ast import literal_eval
 from semanticscholar import SemanticScholar, SemanticScholarException
 
 current_script_directory = os.path.dirname(os.path.realpath(__file__))
-project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
-sys.path.append(os.path.join(project_root))
+PROJECT_ROOT = Path(os.path.abspath(os.path.join(current_script_directory, os.pardir)))
+sys.path.append(PROJECT_ROOT)
 
 VALID_ACTIONS = ['add new item', 'add ss_id', 'update_item', 'blacklist ss_id', 'None', 'add manually']
 
@@ -396,17 +397,15 @@ def reporting(items_to_add, blacklist_items, items_to_update, failed_new_items, 
 
 def main():
     # load manually_checked
-    directory = os.path.join(project_root, 'script_data')
+    directory = PROJECT_ROOT / 'script_data'
     filename = get_latest_manual_check_file(directory)
-    manually_checked = pd.read_excel(os.path.join(directory, filename))
+    manually_checked = pd.read_excel(directory / filename)
 
     print("Filename: ", filename)
-    #manually_checked['ss_pmid'] = manually_checked['ss_pmid'].fillna('-1').astype(int).astype(str).replace('-1', '')
     manually_checked['ss_pmid'] = (manually_checked['ss_pmid'].apply(lambda x: str(int(x)) if pd.notna(x) else ''))
     manually_checked['ss_doi'] = manually_checked['ss_doi'].fillna('')
     
-    # load bib file just for reading at this point
-    diag_bib_path = os.path.join('diag.bib')
+    diag_bib_path = PROJECT_ROOT.parent / 'diag.bib'
 
     diag_bib_raw = read_bibfile(None, diag_bib_path)
     remove_items = manually_checked[manually_checked['action']=='[update item]']['bibkey'].tolist()
@@ -436,7 +435,7 @@ def main():
     #save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
 
     # Update the blacklist
-    blacklist_path = os.path.join(project_root, 'script_data', 'blacklist.csv')
+    blacklist_path = PROJECT_ROOT / 'script_data' / 'blacklist.csv'
     blacklist_df = pd.read_csv(blacklist_path)
     update_blacklist_csv(blacklist_df, blacklist_items, blacklist_path)
 
