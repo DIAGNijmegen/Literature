@@ -1,3 +1,5 @@
+from difflib import get_close_matches
+
 import pandas as pd
 import os
 import string
@@ -13,6 +15,8 @@ from semanticscholar import SemanticScholar, SemanticScholarException
 current_script_directory = os.path.dirname(os.path.realpath(__file__))
 project_root = os.path.abspath(os.path.join(current_script_directory, os.pardir))
 sys.path.append(os.path.join(project_root))
+
+VALID_ACTIONS = ['add new item', 'add ss_id', 'update_item', 'blacklist ss_id', 'None', 'add manually']
 
 def from_bib_to_csv(diag_bib_raw):
     """Convert bib file to a csv."""
@@ -255,6 +259,28 @@ def get_latest_manual_check_file(directory):
     return os.path.join(directory, latest_filename)
 
 
+def get_valid_action(action):
+    action = action.strip()
+
+    if action in VALID_ACTIONS:
+        return action
+
+    if "," in action:
+        print(f"Ambiguous action '{action}' contains a comma. Please specify only one action.")
+        return False
+
+    matches = get_close_matches(
+        action,
+        VALID_ACTIONS,
+        n=2,          # get top 2 to detect ambiguity
+        cutoff=0.85   # tune as needed
+    )
+
+    if len(matches) == 1:
+        return matches[0]
+
+    return False
+
 def loop_manual_check(manually_checked, diag_bib_orig):
     # Iterate through all items in the manually checked csv
     blacklist_items = []
@@ -269,15 +295,17 @@ def loop_manual_check(manually_checked, diag_bib_orig):
     
     
     for index, bib_item in manually_checked.iterrows():
-        print(f"Working on {index+1}/{len(manually_checked)}: {bib_item['ss_doi']} (action is {bib_item['action']})")
-        # Make sure item is manually checked
-        if "," in bib_item['action']:
-            print(f"{bib_item['ss_id']} has not been checked yet, make sure only 1 action is mentioned")
+        original_action = bib_item['action']
+        action = get_valid_action(original_action)
+
+        print(f"Working on {index+1}/{len(manually_checked)}: {bib_item['ss_doi']} (action is {original_action} -> {action})")
+
+        if action is False:
+            print(f"Could not determine a valid action for {bib_item['ss_id']} with action {original_action} -> {action}")
             failed_to_find_actions.append(bib_item)
             continue
-    
-        # Add new item to diag.bib
-        elif "[add new item]" == bib_item['action'].strip() or "[update item]" == bib_item['action'].strip():
+
+        if action == "add new item" or action == "update item":
            
            bib_item_text = get_bib_info(diag_bib_orig, bib_item)
            print(bib_item_text)
@@ -297,23 +325,21 @@ def loop_manual_check(manually_checked, diag_bib_orig):
                print('failed to find details for doi, ss_id', bib_item['ss_doi'], bib_item['ss_id'])
                failed_new_items.append(bib_item)
            
-    
-        # Add ss_id to already existing doi in diag.bib
-        elif "[add ss_id]" in bib_item['action'].strip():
-            # just store a list of these items for now and we will update the file at the end
+        elif action == "add ss_id":
             items_to_update += [bib_item]
             
-        # Get items to blacklist
-        elif "blacklist" in bib_item['action'].strip():
+        elif action == "blacklist ss_id":
             blacklist_item = get_item_to_blacklist(bib_item)
             blacklist_items.append(blacklist_item)
     
-        # Get None items
-        elif '[None]' in bib_item['action'].strip() or '[update item]' in bib_item['action'].strip():
+        elif action == "None":
             continue
+
+        elif action == "add manually":
+            print("Action 'add manually is not yet implemented, should return a new csv file with only the items that need to be added manually.")
             
         else:
-            print('failed to find action', bib_item['action'])
+            print('failed to find action', action)
             failed_to_find_actions.append(bib_item)
 
     return blacklist_items, items_to_add, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, dict_new_items_bibkey_pmid
