@@ -325,20 +325,19 @@ def reporting(items_to_add, blacklist_items, items_to_update, failed_new_items, 
     print("DONE PROCESSING MANUALLY CHECKED ITEMS")
     print("=" * 80)
 
-    new_items_count = items_to_add.count('{yes}')
     count_action_none = np.sum(np.fromiter(('none' in str(action).lower() for action in manually_checked['action']), dtype=bool))
-    total_processed = (len(blacklist_items) + len(items_to_update) + new_items_count + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none)
+    total_processed = (len(blacklist_items) + len(items_to_update) + len(items_to_add) + len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + count_action_none)
 
     print("\nSUMMARY")
     print("-" * 80)
     print(f"{'Blacklisted items:':35} {len(blacklist_items)}")
     print(f"{'Updated existing items:':35} {len(items_to_update)}")
-    print(f"{'Newly added items:':35} {new_items_count}")
+    print(f"{'Newly added items:':35} {len(items_to_add)}")
     print(f"{'Items with action None:':35} {count_action_none}")
     print(f"{'Total processed items:':35} {total_processed}")
     print(f"{'Rows in manual check file:':35} {manually_checked.shape[0]}")
 
-    total_failures = len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) + len(ss_ids_not_found_for_citations)
+    total_failures = len(failed_new_items) + len(failed_updated_items) + len(failed_to_find_actions) #+ len(ss_ids_not_found_for_citations)
     if total_failures == 0:
         print("\nNo failures encountered.")
 
@@ -407,8 +406,9 @@ def main():
             failed_updated_items.append(item_to_update)
 
     # Update citation counts
-    diag_bib_raw_new_cits, ss_ids_not_found_for_citations = update_citation_count(diag_bib_raw)
-    save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
+    #diag_bib_raw_new_cits, ss_ids_not_found_for_citations = update_citation_count(diag_bib_raw)
+    ss_ids_not_found_for_citations=0
+    #save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
 
     # Update the blacklist
     blacklist_path = os.path.join(project_root, 'script_data', 'blacklist.csv')
@@ -417,7 +417,7 @@ def main():
 
     reporting(items_to_add, blacklist_items, items_to_update, failed_new_items, failed_updated_items, failed_to_find_actions, ss_ids_not_found_for_citations, manually_checked)
     
-    save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
+    #save_to_file(diag_bib_raw_new_cits, None, 'diag.bib')
 
 
 if __name__ == "__main__":
