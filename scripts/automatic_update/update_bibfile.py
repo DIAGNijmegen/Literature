@@ -375,9 +375,8 @@ def main():
     manually_checked = pd.read_excel(os.path.join(directory, filename))
 
     print("Filename: ", filename)
-    manually_checked['ss_pmid'] = manually_checked['ss_pmid'].fillna('-1')
-    manually_checked['ss_pmid'] = manually_checked['ss_pmid'].astype(int).astype(str)
-    manually_checked['ss_pmid'] = manually_checked['ss_pmid'].replace('-1', '')
+    #manually_checked['ss_pmid'] = manually_checked['ss_pmid'].fillna('-1').astype(int).astype(str).replace('-1', '')
+    manually_checked['ss_pmid'] = (manually_checked['ss_pmid'].apply(lambda x: str(int(x)) if pd.notna(x) else ''))
     manually_checked['ss_doi'] = manually_checked['ss_doi'].fillna('')
     
     # load bib file just for reading at this point
