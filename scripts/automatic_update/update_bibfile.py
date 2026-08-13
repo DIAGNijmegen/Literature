@@ -134,7 +134,7 @@ def get_bib_info(diag_bib_file, item): #diag_bib_file is the file read in as a s
     reader = GetBiblatex(doi=item['ss_doi'], ss_id=item['ss_id'], diag_bib=diag_bib_file)
     bibtext = reader.get_bib_text()
     # Return the bibtext if it is not 'empty', otherwise return None
-    return bibtext if bibtext != 'empty' else None
+    return bibtext #if bibtext != 'empty' else None
 
 
 def add_ss_id_doi_pmid_to_existing_bibkey(diag_bib_raw, item_row):

@@ -26,7 +26,11 @@ class GetBiblatex:
             headers={"Accept": "application/vnd.citationstyles.csl+json"},
             timeout=20,
         )
-        response.raise_for_status()
+        #response.raise_for_status()
+
+        if response.status_code == 404:
+            print(f"DOI not found: {self.doi}")
+            return None
 
         return response.json()
 
@@ -120,6 +124,9 @@ class GetBiblatex:
 
         #try:
         response_json = self._get_doi_csl()
+        if response_json == None:
+            return None
+        
         abstract = self._get_doi_abstract()
         abstract = self._convert_to_biblatex_format(author_name=abstract)
 
