@@ -169,16 +169,15 @@ def _build_row(row, found_item, ratio, reason):
     return (
         found_item
         | {
-            'bibkey': row.iloc[0], 
+            'bibkey': row['bibkey'], 
             'url': f'https://www.semanticscholar.org/paper/{found_item["ss_id"]}',
             'match_score': ratio, 
-            'bib_doi': row.iloc[4], 
-            'ss_doi': row.iloc[4], 
-            'bib_title': row.iloc[2], 
-            'bib_authors': row.iloc[3],
-            'bib_journal': row.iloc[6], 
-            'bib_year': row.iloc[7], 
-            'bib_type': row.iloc[1], 
+            'bib_doi': row['doi'], 
+            'bib_title': row['title'], 
+            'bib_authors': row['authors'],
+            'bib_journal': row['journal'], 
+            'bib_year': row['year'], 
+            'bib_type': row['type'], 
             'reason': reason, 
             'action': ACTIONS
         }
