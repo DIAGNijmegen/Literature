@@ -23249,6 +23249,18 @@
   all_ss_ids = {['81cfc7e735194a4493f16e501f985fa009bfdff7']},
 }
 
+@article{Meeu26,
+  author = {Meeuwsen, Fr\'{e}d\'{e}rique and Balkenhol, Maschenka and Geijs, Daan and van Eekelen, Leander and Lomans, Robin and van de Loo, Rob and Freund-Winkel, Kim and van Overdijk, Patrick and van den Kieboom-Hageman, Susan and Grolleman, Judith and Litjens, Geert and Grünberg, Katrien and van der Laak, Jeroen},
+  title = {A practical roadmap to implementation of in-house developed computational pathology algorithms},
+  doi = {10.21203/rs.3.rs-9473448/v1},
+  year = {2026},
+  abstract = {Despite rapid advances in artificial intelligence (AI) for digital pathology, translation from algorithm development to routine clinical use remains rare. Most studies focus on technical performance, overlooking the different implementation steps needed for safe, sustainable deployment. This study addresses that gap by detailing the real-world integration of a laboratory-developed AI tool into the daily workflow of an academic pathology department. Our approach encompasses regulatory compliance, IT integration, validation studies, workflow redesign, and user training, essential for lasting adoption under current regulation. Through this process, we developed a flexible, locally adapted system which is now used in routine care. This work offers a practical, replicable framework for other laboratories, highlighting that successful implementation takes far more than technical accuracy alone.},
+  url = {https://www.researchsquare.com/article/rs-9473448/v1},
+  file = {Meeu26a.pdf:pdf\\Meeu26a.pdf:PDF},
+  optnote = {DIAG, PATHOLOGY},
+  journal = {Research Square},
+}
+
 @inproceedings{Mehr17,
   author = {Mehrtash, Alireza and Sedghi, Alireza and Ghafoorian, Mohsen and Taghipour, Mehdi and Tempany, Clare M. and Wells, William M. and Kapur, Tina and Mousavi, Parvin and Abolmaesumi, Purang and Fedorov, Andriy},
   booktitle = MI,
@@ -27291,8 +27303,6 @@
   doi = {10.1148/ryai.260179},
   year = {2026},
   abstract = {
-                                   <jats:title/>
-                                   Purpose To compare the performance of an artificial intelligence (AI) system with that of radiologists for estimating malignancy risk of indeterminate-size nodules (5-15 mm) on low-dose CT (LDCT) within a standardized and transparent evaluation framework. Materials and Methods Teams participating in the AI study had access to a public dataset of 555 malignant and 5608 benign nodules on 4069 baseline LDCT scans from the National Lung Screening Trial (NLST) to develop AI systems. External testing was performed on 156 malignant and 312 benign size-matched nodules, all of indeterminate size, from 463 baseline scans collected from three large European lung cancer screening trials between 2004 and 2018, and the best-performing AI system (based on area under the receiver operating characteristic curve [AUC]) was selected. An observer study was conducted in which radiologists assessed 300 randomly selected nodules (100 malignant, 200 benign) from the external test set. Radiologists categorized nodules as low, intermediate, or high-risk, and the >= intermediate-risk threshold (intermediate or high-risk) was used to define a positive test. The selected AI system was compared with radiologists on this subset using the AUC. Results The selected AI system demonstrated superior performance to the 65 radiologists' average (AUC, 0.78 (95% CI: 0.73, 0.84) vs 0.70 (95% CI: 0.65, 0.74), P = .001). When using the >= intermediate-risk threshold, the AI system correctly classified 12% more malignant nodules at matched specificity and yielded 20% fewer false positives at matched sensitivity. Conclusion The selected AI system was superior to radiologists in estimating malignancy risk of indeterminate lung nodules on LDCT. (c)RSNA, 2026
                                  },
   url = {http://dx.doi.org/10.1148/ryai.260179},
   file = {Peet26.pdf:pdf\\Peet26.pdf:PDF},
@@ -27302,6 +27312,19 @@
   all_ss_ids = {['ab2485c9cbac219808d2e86a5674ab36488cf2b9']},
   pmid = {42340186},
   citation-count = {0},
+}
+
+@phdthesis{Peet26a,
+  author = {Dr\'{e} J. J. Peeters},
+  title = {Towards safe implementation of AI-based malignancy probability estimation of pulmonary nodules on thoracic CT},
+  url = {https://repository.ubn.ru.nl/handle/2066/335247},
+  abstract = {The central aim of this thesis was to advance the reliability and safety of AI for pulmonary nodule malignancy probability estimation in both lung cancer screening and routine clinical care. Rather than focusing solely on improving predictive performance, this work addressed some key limitations that can slow down the clinical deployment of AI systems. In Chapter 2, we demonstrated that estimating AI uncertainty can reliably identify cases in which the performance of AI starts to degrade, enabling more cautious and informed use of model predictions. In Chapter 3, we showed that out-of-distribution detection can identify previously unseen data scenarios (dataset shifts) that might negatively affect AI reliability when deployed in clinical practice. In Chapter 4, we established a standardized benchmarking framework through the LUNA25 challenge and demonstrated that an AI system can outperform the average radiologist in malignancy probability estimation of indeterminate nodules on lung cancer screening CT. Finally, in Chapter 5, we showed that using semi-automated nodule detection strategies for the development of AI can substantially reduce radiologist workload with compromising AI model performance. Together, these chapters form a complementary framework that supports responsible, safe and reliable development and deployment of AI for lung nodule malignancy probability estimation.},
+  file = {Peet26a.pdf:pdf/Peet26a.pdf:PDF},
+  optnote = {DIAG, RADIOLOGY},
+  school = {Radboud University},
+  promotor = {C. Jacobs and W.M. Prokop and R. Vliegenthart},
+  year = {2026},
+  journal = {PhD thesis},
 }
 
 @conference{Pegg17a,
@@ -32383,6 +32406,20 @@ url = {https://doi.org/10.1038/s41598-026-59821-z}
   citation-count = {0},
   pages = {e81500-e81500},
   volume = {14},
+}
+
+@phdthesis{Schi26a,
+  author = {Anoeska J.R. Schipper},
+  title = {Machine learning and large language models for appendicitis risk estimation and hemoglobinopathy screening},
+  url = {https://repository.ubn.ru.nl/handle/2066/335229},
+  abstract = {This thesis examines through two representative clinical use cases, whether AI can operate as practical, trustworthy adjuncts to clinical reasoning during the earliest and most uncertain phases of diagnostic decision-making: 1. Hemoglobinopathy screening in the clinical laboratory; 2. Appendicitis risk stratification in the emergency department. Both domains represent common diagnostic challenges where both rule-based (knowledge-based) and AI-based (non-knowledge-based) CDSS exist. However, existing systems are mostly developed in singlecenter settings, often lack external validation and benchmarking against current clinical practice, and are rarely designed to operate in parallel with routine diagnostic workflows, leaving their practical value uncertain. This thesis therefore evaluates: whether AI-based CDSS built on routine data can achieve reliable and generalizable performance across hospitals and patient populations, how they compare with existing rule-based diagnostic tools and physicians' diagnostic performance, and how such systems might operate as components embedded in established workflows without imposing additional administrative or cognitive burden, while providing real-time decision support.},
+  file = {Schi26a.pdf:pdf/Schi26a.pdf:PDF},
+  optnote = {DIAG, RADIOLOGY},
+  school = {Radboud University},
+  copromotor = {S. Kurstjens and M.J.C.M. Rutten},
+  promotor = {B. van Ginneken and G.C.M. Kusters},
+  year = {2026},
+  journal = {PhD thesis},
 }
 
 @conference{Schm12,
