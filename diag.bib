@@ -4665,6 +4665,27 @@
   gscites = {0},
 }
 
+@phdthesis{Bosm26,
+  author = {Joeran S. Bosma},
+  title = {Automated Data Mining for Medical Image Analysis},
+  url = {https://repository.ubn.ru.nl/handle/2066/336700},
+  abstract = {
+  Healthcare systems worldwide face a critical shortage of diagnostic personnel, while global cancer incidence is projected to rise by 47% from 2020 to 2040. This thesis addresses core challenges in medical AI, using prostate cancer detection with MRI as the primary clinical application. It shows how expert-level performance can be achieved with reduced manual effort and establishes rigorous, reproducible evaluation frameworks. 
+  Data scaling via report-guided learning. Semisupervised methods have transferred poorly from natural to medical imaging. This thesis introduces report-guided approaches that leverage clinical reports to automate dense label generation, which minimizes manual annotation effort and allowed to train with 17896 prostate MRI examinations from 24 hospitals across 10 countries. Adding automatically labeled examinations improved downstream diagnostic performance, compared to training with 9107 manually labeled examinations from three hospitals. Our first method leverages reported lesion counts, and our second method (SCALE) links radiology and histopathology reports to incorporate spatially localized, histopathology-confirmed lesions. 
+  Expert-level performance and benchmarking. We organized three worldwide tournaments to evaluate AI algorithms in a fair and reproducible manner. The PI-CAI challenge evaluated clinically significant prostate cancer detection with MRI. Here we found that the best AI system outperformed a global pool of 62 radiologists in a paired reader study and performed on par with multidisciplinary clinical decisions. The DRAGON challenge measured performance for medical report information extraction with large language models, and the UNICORN challenge evaluated multimodal foundation models. These benchmarks provide fast, decision-grade feedback on diagnostically relevant performance, enabling systematic comparison and progress tracking. 
+  Reproducibility and statistical rigor. To close critical gaps in medical-AI evaluation, all benchmarks enforce reproducibility through containerization on the Grand Challenge cloud platform. Substantial training-run variability is addressed with prespecified statistical analysis plans and multiple independent reruns where feasible. 
+  Clinical translation. AI can support healthcare through several deployment modes, including workload triage, safety-net reading, lesion proposals, and autonomous handling of low-risk cases. Having achieved expert-level performance for the prostate cancer detection AI system enables implementing these use cases in clinical routine. Reportguided annotation also lays the groundwork for post-market surveillance and continuous improvement, aligning with emerging regulatory requirements. 
+  Conclusion. Expert-level medical AI is achievable with data-efficient methods and rigorous evaluation. The shift from artisanal model building to scalable systems creates a reliable pathway to clinical deployment, positioning prostate MRI AI for prospective validation and providing methodological foundations for scaling to other domains.
+  },
+  file = {Bosm26.pdf:pdf/Bosm26.pdf:PDF},
+  optnote = {DIAG, RADIOLOGY},
+  school = {Radboud University},
+  promotor = {H.J. Huisman},
+  copromotor = {M. de Rooij},
+  year = {2026},
+  journal = {PhD thesis},
+}
+
 @conference{Bosma21a,
   author = {Joeran S. Bosma and Anindo Saha and Matin Hosseinzadeh and Henkjan Huisman},
   booktitle = RSNA,
@@ -10470,6 +10491,20 @@
   pages = {100653},
   pmid = {39522646},
   gscites = {0},
+}
+
+@phdthesis{Geij26,
+  author = {Daan J. Geijs},
+  title = {Dealing with the wave: Automating skin cancer assessment},
+  url = {https://repository.ubn.ru.nl/handle/2066/335224},
+  abstract = {With the growing incidence of BCC and a shortage of pathologists worldwide, there is a clear need for reproducible and efficient diagnostic tools. This thesis aims to develop AI systems that can be integrated into clinical practice, rather than remaining at the research stage. A key challenge in this field is the limited availability of high-quality datasets. To address this, we create a large, publicly available dermatopathology dataset to support the development and validation of clinically relevant AI systems. Using this dataset, we focus on two main diagnostic tasks in BCC: tumor detection and subtype classification. These represent essential components of clinical assessment. To show their practical value, we further explore the use of these algorithms in Mohs micrographic surgery, assessing whether models trained on routine sections can be fine-tuned for frozen sections to support dermatologists during intraoperative decision-making.},
+  file = {Geij26.pdf:pdf/Geij26.pdf:PDF},
+  optnote = {DIAG, PATHOLOGY},
+  school = {Radboud University},
+  promotor = {G.J.S. Litjens and J.A.W.M. van der Laak},
+  copromotor = {A. Amir},
+  year = {2026},
+  journal = {PhD thesis},
 }
 
 @article{Geld18,
